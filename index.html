@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Сканер упаковки</title>
+  <title>Сканер упаковки v88</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
@@ -57,7 +57,7 @@
     .packed-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
     .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
     .packed-model { font-size: 14px; color: #6b7280; text-align: center; margin-bottom: 4px; font-family: monospace; }
-    .packed-type { font-size: 16px; color: #374151; text-align: center; font-weight: 600; margin-bottom: 24px; }
+    .packed-type { font-size: 32px; color: #15803d; text-align: center; font-weight: 700; margin-bottom: 24px; line-height: 1.2; }
 
     .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
     .btn-ok:active { background: #166534; }
@@ -89,6 +89,23 @@
       margin-bottom: 4px;
     }
     select#packSelect:focus { border-color: #15803d; }
+    .pack-btn {
+      display: block;
+      width: 100%;
+      height: 64px;
+      border: 2px solid #d1d5db;
+      border-radius: 14px;
+      background: #f9fafb;
+      color: #111827;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: all 0.15s;
+    }
+    .pack-btn:hover { border-color: #15803d; background: #f0fdf4; }
+    .pack-btn:active { transform: scale(0.97); }
+    .pack-btn.selected { border-color: #15803d; background: #15803d; color: white; }
 
     /* ── SAVING состояние ── */
     .saving-wrap { text-align: center; padding: 20px 0; }
@@ -112,6 +129,28 @@
     .error-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
     .error-text { font-size: 16px; color: #dc2626; text-align: center; margin-bottom: 24px; line-height: 1.5; }
 
+    /* Информация о сканировании */
+    .scan-info { background: #f8fafc; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; text-align: center; }
+    .scan-barcode { font-size: 13px; color: #9ca3af; margin-bottom: 4px; font-family: monospace; }
+    .scan-model { font-size: 18px; font-weight: 700; color: #111827; font-family: monospace; margin-bottom: 8px; }
+    .scan-photo { text-align: center; margin: 12px 0 0; }
+    .scan-photo img { max-width: 100%; max-height: 300px; border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .no-photo { color: #9ca3af; font-size: 14px; font-style: italic; margin: 12px 0; }
+
+    /* Полноэкранное фото */
+    .photo-overlay {
+      position: fixed; inset: 0; z-index: 99999;
+      background: rgba(0,0,0,0.9);
+      display: none; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .photo-overlay.active { display: flex; }
+    .photo-overlay img {
+      max-width: 95vw; max-height: 95vh;
+      border-radius: 8px;
+      box-shadow: 0 0 60px rgba(0,0,0,0.5);
+    }
+
     /* Утилиты */
     .hidden { display: none; }
   </style>
@@ -119,7 +158,7 @@
 <body>
 
 <div class="card">
-  <h1>📦 Сканер упаковки</h1>
+  <h1>📦 Сканер упаковки v88</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -130,6 +169,15 @@
   </div>
 
   <!-- IDLE -->
+  <!-- Информация о текущем сканировании -->
+  <div id="scanInfo" class="scan-info hidden">
+    <div class="scan-barcode" id="scanBarcode"></div>
+    <div class="scan-model" id="scanModel"></div>
+    <div class="scan-photo" id="scanPhoto">
+      <!-- заполняется из JS -->
+    </div>
+  </div>
+
   <div id="stateIdle">
     <p class="barcode-label">Введите или отсканируйте штрих-код</p>
     <input type="text" id="barcodeInput" placeholder="Штрих-код..." autocomplete="off" autocorrect="off" spellcheck="false">
@@ -155,14 +203,13 @@
   <div id="stateSelectPack" class="hidden">
     <p class="select-label">Выберите тип упаковки</p>
     <p class="select-model" id="selectModel"></p>
-    <select id="packSelect">
-      <option value="">— выберите —</option>
-      <option value="коробка мелкая старая пробная">коробка мелкая старая пробная</option>
-      <option value="коробка S 28x19.5x30">коробка S 28x19.5x30</option>
-      <option value="пакет S 30x20">пакет S 30x20</option>
-      <option value="пакет L 60x30">пакет L 60x30</option>
-    </select>
-    <button class="btn btn-primary" onclick="onSave()" style="margin-top:16px">Сохранить</button>
+    <div id="packButtons">
+      <button class="pack-btn" onclick="selectPack(this,'коробка мелкая старая пробная')">коробка мелкая старая пробная</button>
+      <button class="pack-btn" onclick="selectPack(this,'коробка S 28x19.5x30')">коробка S 28x19.5x30</button>
+      <button class="pack-btn" onclick="selectPack(this,'пакет S 30x20')">пакет S 30x20</button>
+      <button class="pack-btn" onclick="selectPack(this,'пакет L 60x30')">пакет L 60x30</button>
+    </div>
+    <button class="btn btn-primary" id="btnSavePack" onclick="onSave()" style="margin-top:16px;opacity:0.4;pointer-events:none">Сохранить</button>
     <button class="btn btn-secondary" onclick="goIdle()">Отмена</button>
   </div>
 
@@ -191,6 +238,9 @@
 </div>
 
 <script>
+// ── Apps Script URL — бэкенд ──
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwg4XoEi9Gmxv-SY2K_KglrSh64agoFitr6pwCIM9MxubDaq50URogmfDpEkuZc7NBUag/exec';
+
 let currentModel = '';
 let timerInterval = null;
 let timerSeconds = 10;
@@ -199,6 +249,18 @@ let timerSeconds = 10;
 let barcodeToModel = {};   // штрих-код → { model, repacked, packType }
 let dataLoaded = false;
 let dataLoadError = null;
+
+// ── API-обёртка вместо google.script.run ──
+function apiCall(action, params) {
+  const url = new URL(APPS_SCRIPT_URL);
+  url.searchParams.set('action', action);
+  if (params) {
+    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+  }
+  return fetch(url.toString())
+    .then(r => r.json())
+    .catch(err => ({ error: err.message }));
+}
 
 const states = ['stateIdle', 'stateAlreadyPacked', 'stateSelectPack', 'stateSaving', 'stateSuccess', 'stateError'];
 
@@ -211,7 +273,13 @@ function goIdle() {
   clearTimer();
   currentModel = '';
   document.getElementById('barcodeInput').value = '';
-  document.getElementById('packSelect').value = '';
+  document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
+  // Сброс кнопок
+  document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+  var saveBtn = document.getElementById('btnSavePack');
+  if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
+  // Скрываем информацию о сканировании
+  document.getElementById('scanInfo').classList.add('hidden');
   showState('stateIdle');
   setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
 }
@@ -228,8 +296,8 @@ document.getElementById('barcodeInput').addEventListener('keydown', function(e) 
  */
 function preloadAllData() {
   showPreloader(true);
-  google.script.run
-    .withSuccessHandler(function(result) {
+  apiCall('getAllBarcodes')
+    .then(function(result) {
       showPreloader(false);
       if (result.error) {
         dataLoadError = result.error;
@@ -237,16 +305,9 @@ function preloadAllData() {
       } else {
         barcodeToModel = result.barcodes || {};
         dataLoaded = true;
-        // Разблокируем поле ввода
         document.getElementById('barcodeInput').focus();
       }
-    })
-    .withFailureHandler(function(err) {
-      showPreloader(false);
-      dataLoadError = err.message || 'Ошибка загрузки данных';
-      showError('Ошибка связи: ' + err.message);
-    })
-    .getAllBarcodes();
+    });
 }
 
 function showPreloader(show) {
@@ -270,12 +331,24 @@ function onSearch() {
     return;
   }
 
-  // Локальный поиск — мгновенно, без вызова сервера!
+  // Локальный поиск — мгновенно!
   const item = barcodeToModel[barcode.toString().trim()];
   if (!item) {
     showError('Штрих-код не найден');
     return;
   }
+
+  // Показываем штрих-код, модель и фото
+  document.getElementById('scanBarcode').textContent = 'Штрих-код: ' + barcode;
+  document.getElementById('scanModel').textContent = 'Модель: ' + item.model;
+  // Фото или "фото не найдено"
+  const photoEl = document.getElementById('scanPhoto');
+  if (item.photoUrl) {
+    photoEl.innerHTML = '<img src="' + item.photoUrl + '" alt="Изделие" onclick="openPhotoFullscreen(this.src)">';
+  } else {
+    photoEl.innerHTML = '<div class="no-photo">Фото не найдено</div>';
+  }
+  document.getElementById('scanInfo').classList.remove('hidden');
 
   currentModel = item.model;
 
@@ -288,8 +361,12 @@ function onSearch() {
   } else {
     // Не упаковлено — выбор упаковки
     document.getElementById('selectModel').textContent = item.model;
-    document.getElementById('packSelect').value = '';
-    showState('stateSelectPack');
+    document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
+  // Сброс кнопок
+  document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+  var saveBtn = document.getElementById('btnSavePack');
+  if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
+  showState('stateSelectPack');
   }
 }
 
@@ -333,12 +410,43 @@ function onOk() {
 function onEdit() {
   clearTimer();
   document.getElementById('selectModel').textContent = currentModel;
-  document.getElementById('packSelect').value = '';
+  document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
+  // Сброс кнопок
+  document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+  var saveBtn = document.getElementById('btnSavePack');
+  if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
+  // Скрываем информацию о сканировании
+  document.getElementById('scanInfo').classList.add('hidden');
   showState('stateSelectPack');
 }
 
+var selectedPackType = '';
+
+function selectPack(el, value) {
+  document.querySelectorAll('.pack-btn').forEach(function(b) {
+    b.classList.remove('selected');
+  });
+  el.classList.add('selected');
+  selectedPackType = value;
+  var saveBtn = document.getElementById('btnSavePack');
+  if (saveBtn) {
+    saveBtn.style.opacity = '1';
+    saveBtn.style.pointerEvents = 'auto';
+  }
+}
+
+// Полноэкранное фото
+function openPhotoFullscreen(src) {
+  var overlay = document.getElementById('photoOverlay');
+  document.getElementById('photoOverlayImg').src = src;
+  overlay.classList.add('active');
+}
+function closePhotoFullscreen() {
+  document.getElementById('photoOverlay').classList.remove('active');
+}
+
 function onSave() {
-  const packType = document.getElementById('packSelect').value;
+  const packType = selectedPackType;
   if (!packType) {
     alert('Выберите тип упаковки');
     return;
@@ -350,19 +458,22 @@ function onSave() {
 
   showState('stateSaving');
 
-  google.script.run
-    .withSuccessHandler(function(result) {
+  apiCall('savePackaging', { model: currentModel, packType: packType })
+    .then(function(result) {
       if (!result.success) {
         showError(result.error || 'Ошибка сохранения');
         return;
       }
+      // Обновляем предзагруженные данные — галочка + тип упаковки
+      Object.keys(barcodeToModel).forEach(function(bc) {
+        if (barcodeToModel[bc].model === currentModel) {
+          barcodeToModel[bc].repacked = true;
+          barcodeToModel[bc].packType = packType;
+        }
+      });
       showState('stateSuccess');
       setTimeout(goIdle, 1200);
-    })
-    .withFailureHandler(function(err) {
-      showError(err.message || 'Ошибка связи со скриптом');
-    })
-    .savePackaging(currentModel, packType);
+    });
 }
 
 function showError(msg) {
@@ -375,5 +486,11 @@ window.onload = function() {
   preloadAllData();
 };
 </script>
+
+<!-- Полноэкранное фото -->
+<div class="photo-overlay" id="photoOverlay" onclick="closePhotoFullscreen()">
+  <img id="photoOverlayImg" src="" alt="Фото">
+</div>
+
 </body>
 </html>
