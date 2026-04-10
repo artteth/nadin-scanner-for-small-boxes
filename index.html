@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   
-  <title>Сканер упаковки v104</title>
+  <title>Сканер упаковки v105</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
@@ -158,12 +158,24 @@
 
     /* Утилиты */
     .hidden { display: none; }
+    .photo-overlay {
+      position: fixed; inset: 0; z-index: 99999;
+      background: rgba(0,0,0,0.92);
+      display: none; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .photo-overlay.active { display: flex; }
+    .photo-overlay img {
+      max-width: 95vw; max-height: 95vh;
+      border-radius: 8px;
+      box-shadow: 0 0 60px rgba(0,0,0,0.5);
+    }
   </style>
 </head>
 <body>
 
 <div class="card">
-  <h1 id="pageTitle">📦 Сканер упаковки v104</h1>
+  <h1 id="pageTitle">📦 Сканер упаковки v105</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -300,6 +312,7 @@ function showState(name) {
 function goIdle() {
   clearErrorTimer();
   clearTimer();
+  closePhotoFullscreen();
   var t = document.getElementById('pageTitle');
   if (t) t.style.display = '';
   currentModel = '';
@@ -432,6 +445,7 @@ function startErrorTimer() {
     updateErrorTimerDisplay();
     if (errorTimerSeconds <= 0) {
       clearErrorTimer();
+      closePhotoFullscreen();
       goIdle();
     }
   }, 1000);
@@ -465,6 +479,7 @@ function startTimer() {
     updateTimerDisplay();
     if (timerSeconds <= 0) {
       clearTimer();
+      closePhotoFullscreen();
       goIdle();
     }
   }, 1000);
@@ -558,6 +573,27 @@ function onSave() {
 function showError(msg) {
   document.getElementById('errorText').textContent = msg;
   showState('stateError');
+}
+
+// ── Полноэкранное фото ──
+function openPhotoFullscreen(src) {
+  var overlay = document.getElementById('photoOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'photoOverlay';
+    overlay.className = 'photo-overlay';
+    overlay.onclick = closePhotoFullscreen;
+    var img = document.createElement('img');
+    img.id = 'photoOverlayImg';
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('photoOverlayImg').src = src;
+  overlay.classList.add('active');
+}
+function closePhotoFullscreen() {
+  var overlay = document.getElementById('photoOverlay');
+  if (overlay) overlay.classList.remove('active');
 }
 
 // При загрузке: фокус + предзагрузка всех данных
