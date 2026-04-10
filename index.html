@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   
-  <title>Сканер упаковки v105</title>
+  <title>Сканер упаковки v106</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
@@ -62,6 +62,7 @@
     .packed-photo img { max-width: 100%; max-height: 250px; border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
     .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
     .packed-barcode { font-size: 20px; color: #111827; text-align: center; font-weight: 700; margin-bottom: 4px; font-family: monospace; }
+    .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 4px; font-family: monospace; }
     .packed-type { font-size: 28px; color: #15803d; text-align: center; font-weight: 700; margin-bottom: 24px; line-height: 1.2; }
 
     .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
@@ -175,7 +176,7 @@
 <body>
 
 <div class="card">
-  <h1 id="pageTitle">📦 Сканер упаковки v105</h1>
+  <h1 id="pageTitle">📦 Сканер упаковки v106</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -208,6 +209,7 @@
       <span class="packed-title-inline">Уже упаковано</span>
     </div>
     <div class="packed-barcode" id="packedBarcode"></div>
+    <div class="packed-model" id="packedModel"></div>
     <div class="packed-type" id="packedType"></div>
     <div class="packed-photo" id="packedPhoto" style="display:none">
       <img id="packedPhotoImg" src="" alt="Изделие">
@@ -402,6 +404,7 @@ function onSearch() {
     document.getElementById('scanInfo').classList.add('hidden');
     document.getElementById('pageTitle').style.display = 'none';
     document.getElementById('packedBarcode').textContent = barcode;
+    document.getElementById('packedModel').textContent = item.model;
     document.getElementById('packedType').textContent = item.packType || '(тип не указан)';
     const pPhoto = document.getElementById('packedPhoto');
     const pImg = document.getElementById('packedPhotoImg');
