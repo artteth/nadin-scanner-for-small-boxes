@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Сканер упаковки v102</title>
+  <title>Сканер упаковки v103</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
@@ -163,7 +163,7 @@
 <body>
 
 <div class="card">
-  <h1>📦 Сканер упаковки v102</h1>
+  <h1 id="pageTitle">📦 Сканер упаковки v103</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -300,6 +300,8 @@ function showState(name) {
 function goIdle() {
   clearErrorTimer();
   clearTimer();
+  var t = document.getElementById('pageTitle');
+  if (t) t.style.display = '';
   currentModel = '';
   document.getElementById('barcodeInput').value = '';
   document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
@@ -363,6 +365,7 @@ function onSearch() {
   // Локальный поиск — мгновенно!
   const item = barcodeToModel[barcode.toString().trim()];
   if (!item) {
+    document.getElementById('pageTitle').style.display = 'none';
     showError('Штрих-код не найден');
     startErrorTimer();
     return;
@@ -384,6 +387,7 @@ function onSearch() {
 
   if (item.repacked) {
     document.getElementById('scanInfo').classList.add('hidden');
+    document.getElementById('pageTitle').style.display = 'none';
     document.getElementById('packedBarcode').textContent = barcode;
     document.getElementById('packedType').textContent = item.packType || '(тип не указан)';
     const pPhoto = document.getElementById('packedPhoto');
@@ -398,6 +402,7 @@ function onSearch() {
     startTimer();
   } else {
     // Не упаковлено — выбор упаковки
+    document.getElementById('pageTitle').style.display = 'none';
     document.getElementById('scanInfo').classList.remove('hidden');
     document.getElementById('selectModel').textContent = item.model;
     document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
