@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Сканер упаковки</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
+
+    .card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    h1 { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 24px; text-align: center; }
+
+    /* ── IDLE состояние ── */
+    .barcode-label { font-size: 14px; color: #6b7280; margin-bottom: 8px; }
+    #barcodeInput {
+      width: 100%;
+      height: 56px;
+      font-size: 22px;
+      border: 2px solid #d1d5db;
+      border-radius: 12px;
+      padding: 0 16px;
+      outline: none;
+      letter-spacing: 2px;
+      color: #111827;
+    }
+    #barcodeInput:focus { border-color: #15803d; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      height: 56px;
+      border: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 14px;
+    }
+    .btn-primary { background: #15803d; color: white; }
+    .btn-primary:active { background: #166534; }
+    .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+    .btn-secondary:active { background: #e5e7eb; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:active { background: #b91c1c; }
+
+    /* ── ALREADY_PACKED состояние ── */
+    .packed-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
+    .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
+    .packed-model { font-size: 14px; color: #6b7280; text-align: center; margin-bottom: 4px; font-family: monospace; }
+    .packed-type { font-size: 16px; color: #374151; text-align: center; font-weight: 600; margin-bottom: 24px; }
+
+    .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
+    .btn-ok:active { background: #166534; }
+    .timer-bar {
+      position: absolute;
+      bottom: 0; left: 0;
+      height: 5px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 0 0 12px 12px;
+      transition: width 1s linear;
+    }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+    .btn-row .btn { margin-top: 0; }
+
+    /* ── SELECT_PACK состояние ── */
+    .select-label { font-size: 15px; color: #374151; margin-bottom: 8px; font-weight: 600; }
+    .select-model { font-size: 13px; color: #9ca3af; margin-bottom: 16px; font-family: monospace; }
+    select#packSelect {
+      width: 100%;
+      height: 56px;
+      font-size: 17px;
+      border: 2px solid #d1d5db;
+      border-radius: 12px;
+      padding: 0 12px;
+      outline: none;
+      color: #111827;
+      background: #f9fafb;
+      margin-bottom: 4px;
+    }
+    select#packSelect:focus { border-color: #15803d; }
+
+    /* ── SAVING состояние ── */
+    .saving-wrap { text-align: center; padding: 20px 0; }
+    .spinner {
+      width: 56px; height: 56px;
+      border: 6px solid #e5e7eb;
+      border-top: 6px solid #15803d;
+      border-radius: 50%;
+      animation: spin 1.2s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .saving-text { font-size: 16px; color: #6b7280; }
+
+    /* ── SUCCESS состояние ── */
+    .success-wrap { text-align: center; padding: 20px 0; }
+    .success-icon { font-size: 56px; margin-bottom: 12px; }
+    .success-text { font-size: 20px; font-weight: 700; color: #15803d; }
+
+    /* ── ERROR состояние ── */
+    .error-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
+    .error-text { font-size: 16px; color: #dc2626; text-align: center; margin-bottom: 24px; line-height: 1.5; }
+
+    /* Утилиты */
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>📦 Сканер упаковки</h1>
+
+  <!-- Прелоадер — показывается при загрузке данных -->
+  <div id="preloader" class="hidden">
+    <div class="saving-wrap">
+      <div class="spinner"></div>
+      <div class="saving-text">Загружаю данные...</div>
+    </div>
+  </div>
+
+  <!-- IDLE -->
+  <div id="stateIdle">
+    <p class="barcode-label">Введите или отсканируйте штрих-код</p>
+    <input type="text" id="barcodeInput" placeholder="Штрих-код..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="btn btn-primary" onclick="onSearch()">Найти</button>
+  </div>
+
+  <!-- ALREADY_PACKED -->
+  <div id="stateAlreadyPacked" class="hidden">
+    <div class="packed-icon">✅</div>
+    <div class="packed-title">Уже упаковано</div>
+    <div class="packed-model" id="packedModel"></div>
+    <div class="packed-type" id="packedType"></div>
+    <button class="btn btn-ok" id="btnOk" onclick="onOk()">
+      OK (<span id="timerCount">10</span>)
+      <div class="timer-bar" id="timerBar" style="width:100%"></div>
+    </button>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="onEdit()">Изменить</button>
+    </div>
+  </div>
+
+  <!-- SELECT_PACK -->
+  <div id="stateSelectPack" class="hidden">
+    <p class="select-label">Выберите тип упаковки</p>
+    <p class="select-model" id="selectModel"></p>
+    <select id="packSelect">
+      <option value="">— выберите —</option>
+      <option value="коробка мелкая старая пробная">коробка мелкая старая пробная</option>
+      <option value="коробка S 28x19.5x30">коробка S 28x19.5x30</option>
+      <option value="пакет S 30x20">пакет S 30x20</option>
+      <option value="пакет L 60x30">пакет L 60x30</option>
+    </select>
+    <button class="btn btn-primary" onclick="onSave()" style="margin-top:16px">Сохранить</button>
+    <button class="btn btn-secondary" onclick="goIdle()">Отмена</button>
+  </div>
+
+  <!-- SAVING -->
+  <div id="stateSaving" class="hidden">
+    <div class="saving-wrap">
+      <div class="spinner"></div>
+      <div class="saving-text">Сохраняю...</div>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div id="stateSuccess" class="hidden">
+    <div class="success-wrap">
+      <div class="success-icon">🎉</div>
+      <div class="success-text">Сохранено!</div>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div id="stateError" class="hidden">
+    <div class="error-icon">❌</div>
+    <div class="error-text" id="errorText"></div>
+    <button class="btn btn-secondary" onclick="goIdle()">Назад</button>
+  </div>
+</div>
+
+<script>
+let currentModel = '';
+let timerInterval = null;
+let timerSeconds = 10;
+
+// ── Предзагруженные данные ──
+let barcodeToModel = {};   // штрих-код → { model, repacked, packType }
+let dataLoaded = false;
+let dataLoadError = null;
+
+const states = ['stateIdle', 'stateAlreadyPacked', 'stateSelectPack', 'stateSaving', 'stateSuccess', 'stateError'];
+
+function showState(name) {
+  states.forEach(s => document.getElementById(s).classList.add('hidden'));
+  document.getElementById(name).classList.remove('hidden');
+}
+
+function goIdle() {
+  clearTimer();
+  currentModel = '';
+  document.getElementById('barcodeInput').value = '';
+  document.getElementById('packSelect').value = '';
+  showState('stateIdle');
+  setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
+}
+
+// Автоматически ищем при нажатии Enter в поле
+document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') onSearch();
+});
+
+/**
+ * Предзагрузка всех данных при старте.
+ * Загружаем все штрих-коды, модели и статусы упаковки в память.
+ * После этого поиск работает локально — мгновенно!
+ */
+function preloadAllData() {
+  showPreloader(true);
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showPreloader(false);
+      if (result.error) {
+        dataLoadError = result.error;
+        showError('Ошибка загрузки: ' + result.error);
+      } else {
+        barcodeToModel = result.barcodes || {};
+        dataLoaded = true;
+        // Разблокируем поле ввода
+        document.getElementById('barcodeInput').focus();
+      }
+    })
+    .withFailureHandler(function(err) {
+      showPreloader(false);
+      dataLoadError = err.message || 'Ошибка загрузки данных';
+      showError('Ошибка связи: ' + err.message);
+    })
+    .getAllBarcodes();
+}
+
+function showPreloader(show) {
+  const el = document.getElementById('preloader');
+  if (!el) return;
+  if (show) {
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function onSearch() {
+  const barcode = document.getElementById('barcodeInput').value.trim();
+  if (!barcode) return;
+
+  // Если данные ещё не загрузились — ждём
+  if (!dataLoaded && !dataLoadError) {
+    showState('stateSaving');
+    setTimeout(function() { onSearch(); }, 300);
+    return;
+  }
+
+  // Локальный поиск — мгновенно, без вызова сервера!
+  const item = barcodeToModel[barcode.toString().trim()];
+  if (!item) {
+    showError('Штрих-код не найден');
+    return;
+  }
+
+  currentModel = item.model;
+
+  if (item.repacked) {
+    // Уже упаковлено
+    document.getElementById('packedModel').textContent = item.model;
+    document.getElementById('packedType').textContent = item.packType || '(тип не указан)';
+    showState('stateAlreadyPacked');
+    startTimer();
+  } else {
+    // Не упаковлено — выбор упаковки
+    document.getElementById('selectModel').textContent = item.model;
+    document.getElementById('packSelect').value = '';
+    showState('stateSelectPack');
+  }
+}
+
+function startTimer() {
+  clearTimer();
+  timerSeconds = 10;
+  updateTimerDisplay();
+  document.getElementById('timerBar').style.width = '100%';
+
+  setTimeout(function() {
+    document.getElementById('timerBar').style.width = '0%';
+    document.getElementById('timerBar').style.transitionDuration = '10s';
+  }, 50);
+
+  timerInterval = setInterval(function() {
+    timerSeconds--;
+    updateTimerDisplay();
+    if (timerSeconds <= 0) {
+      clearTimer();
+      goIdle();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  document.getElementById('timerCount').textContent = timerSeconds;
+}
+
+function clearTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function onOk() {
+  clearTimer();
+  goIdle();
+}
+
+function onEdit() {
+  clearTimer();
+  document.getElementById('selectModel').textContent = currentModel;
+  document.getElementById('packSelect').value = '';
+  showState('stateSelectPack');
+}
+
+function onSave() {
+  const packType = document.getElementById('packSelect').value;
+  if (!packType) {
+    alert('Выберите тип упаковки');
+    return;
+  }
+  if (!currentModel) {
+    showError('Модель не определена, начните заново');
+    return;
+  }
+
+  showState('stateSaving');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.success) {
+        showError(result.error || 'Ошибка сохранения');
+        return;
+      }
+      showState('stateSuccess');
+      setTimeout(goIdle, 1200);
+    })
+    .withFailureHandler(function(err) {
+      showError(err.message || 'Ошибка связи со скриптом');
+    })
+    .savePackaging(currentModel, packType);
+}
+
+function showError(msg) {
+  document.getElementById('errorText').textContent = msg;
+  showState('stateError');
+}
+
+// При загрузке: фокус + предзагрузка всех данных
+window.onload = function() {
+  preloadAllData();
+};
+</script>
+</body>
+</html>
