@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Сканер упаковки v95</title>
+  <title>Сканер упаковки v99</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
@@ -158,7 +158,7 @@
 <body>
 
 <div class="card">
-  <h1>📦 Сканер упаковки v95</h1>
+  <h1>📦 Сканер упаковки v99</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -233,7 +233,10 @@
   <div id="stateError" class="hidden">
     <div class="error-icon">❌</div>
     <div class="error-text" id="errorText"></div>
-    <button class="btn btn-secondary" onclick="goIdle()">Назад</button>
+    <button class="btn btn-ok" id="btnErrorOk" onclick="clearErrorTimer();goIdle();">
+      Назад (<span id="errorTimerCount">5</span>)
+      <div class="timer-bar" id="errorTimerBar" style="width:100%"></div>
+    </button>
   </div>
 </div>
 
@@ -285,6 +288,7 @@ function showState(name) {
 }
 
 function goIdle() {
+  clearErrorTimer();
   clearTimer();
   currentModel = '';
   document.getElementById('barcodeInput').value = '';
@@ -350,7 +354,7 @@ function onSearch() {
   const item = barcodeToModel[barcode.toString().trim()];
   if (!item) {
     showError('Штрих-код не найден');
-    setTimeout(goIdle, 5000);
+    startErrorTimer();
     return;
   }
 
@@ -383,6 +387,41 @@ function onSearch() {
   var saveBtn = document.getElementById('btnSavePack');
   if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
   showState('stateSelectPack');
+  }
+}
+
+// ── Таймер для экрана ошибки ──
+let errorTimerInterval = null;
+let errorTimerSeconds = 5;
+
+function startErrorTimer() {
+  clearErrorTimer();
+  errorTimerSeconds = 5;
+  updateErrorTimerDisplay();
+  document.getElementById('errorTimerBar').style.width = '100%';
+  setTimeout(function() {
+    document.getElementById('errorTimerBar').style.width = '0%';
+    document.getElementById('errorTimerBar').style.transitionDuration = '5s';
+  }, 50);
+  errorTimerInterval = setInterval(function() {
+    errorTimerSeconds--;
+    updateErrorTimerDisplay();
+    if (errorTimerSeconds <= 0) {
+      clearErrorTimer();
+      goIdle();
+    }
+  }, 1000);
+}
+
+function updateErrorTimerDisplay() {
+  var el = document.getElementById('errorTimerCount');
+  if (el) el.textContent = errorTimerSeconds;
+}
+
+function clearErrorTimer() {
+  if (errorTimerInterval) {
+    clearInterval(errorTimerInterval);
+    errorTimerInterval = null;
   }
 }
 
