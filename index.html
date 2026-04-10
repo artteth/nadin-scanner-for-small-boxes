@@ -250,16 +250,31 @@ let barcodeToModel = {};   // штрих-код → { model, repacked, packType 
 let dataLoaded = false;
 let dataLoadError = null;
 
-// ── API-обёртка вместо google.script.run ──
+// ── API-обёртка через JSONP (обход CORS) ──
+let _apiCallId = 0;
 function apiCall(action, params) {
-  const url = new URL(APPS_SCRIPT_URL);
-  url.searchParams.set('action', action);
-  if (params) {
-    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
-  }
-  return fetch(url.toString())
-    .then(r => r.json())
-    .catch(err => ({ error: err.message }));
+  return new Promise(function(resolve) {
+    const id = '_apiCb' + (++_apiCallId);
+    const url = new URL(APPS_SCRIPT_URL);
+    url.searchParams.set('action', action);
+    url.searchParams.set('callback', id);
+    if (params) {
+      Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+    }
+    window[id] = function(result) {
+      resolve(result);
+      delete window[id];
+      script.remove();
+    };
+    const script = document.createElement('script');
+    script.src = url.toString();
+    script.onerror = function() {
+      resolve({ error: 'Network error' });
+      delete window[id];
+      script.remove();
+    };
+    document.head.appendChild(script);
+  });
 }
 
 const states = ['stateIdle', 'stateAlreadyPacked', 'stateSelectPack', 'stateSaving', 'stateSuccess', 'stateError'];
