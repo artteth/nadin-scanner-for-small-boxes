@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v115</title>
+  <title>Сканер упаковки v116</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -500,7 +500,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v115</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v116</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1127,22 +1127,24 @@ function renderTableView() {
   }).join('');
 }
 
-// Делегирование событий таблицы
-document.getElementById('tblBody').addEventListener('change', function(e) {
-  var tr = e.target.closest('tr[data-model]');
-  if (!tr) return;
-  var model = tr.dataset.model;
-  if (e.target.type === 'checkbox') {
-    tblSetRepacked(model, e.target.checked, tr);
-  } else if (e.target.classList.contains('tbl-pack-sel')) {
-    tblSetPackType(model, e.target.value, tr);
-  }
-});
-document.getElementById('tblBody').addEventListener('click', function(e) {
-  if (!e.target.classList.contains('tbl-save-btn')) return;
-  var tr = e.target.closest('tr[data-model]');
-  if (tr) saveTableItem(tr.dataset.model, e.target);
-});
+// Делегирование событий таблицы — регистрируется после загрузки DOM
+function initTableEvents() {
+  document.getElementById('tblBody').addEventListener('change', function(e) {
+    var tr = e.target.closest('tr[data-model]');
+    if (!tr) return;
+    var model = tr.dataset.model;
+    if (e.target.type === 'checkbox') {
+      tblSetRepacked(model, e.target.checked, tr);
+    } else if (e.target.classList.contains('tbl-pack-sel')) {
+      tblSetPackType(model, e.target.value, tr);
+    }
+  });
+  document.getElementById('tblBody').addEventListener('click', function(e) {
+    if (!e.target.classList.contains('tbl-save-btn')) return;
+    var tr = e.target.closest('tr[data-model]');
+    if (tr) saveTableItem(tr.dataset.model, e.target);
+  });
+}
 
 function tblSetRepacked(model, checked, tr) {
   Object.keys(barcodeToModel).forEach(function(bc) {
@@ -1283,6 +1285,7 @@ function closePhotoFullscreen() {
 
 // При загрузке: настройки + данные + SW
 window.onload = function() {
+  initTableEvents();
   loadSettings();
   preloadAllData();
   if ('serviceWorker' in navigator) {
