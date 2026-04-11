@@ -9,6 +9,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
+  <!-- Scanbot SDK v8 UI2 -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/ScanbotSDK.ui2.min.js"></script>
+
   <title>Сканер упаковки v120</title>
   <style>
     :root {
@@ -596,6 +599,7 @@
     <button class="btn btn-primary" onclick="onSearch()">Найти</button>
     <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
     <button class="btn btn-secondary" onclick="openScanbot()">📷 Расширенный сканер</button>
+    <button class="btn btn-secondary" onclick="openScanbotSDK()">📱 Сканировать Scanbot</button>
     <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
   </div>
 
@@ -1472,6 +1476,39 @@ function closeScanbot() {
   }
   scanbotTorchOn = false; scanbotVideoTrack = null;
   if (scanbotReader) { try { scanbotReader.reset(); } catch(e) {} scanbotReader = null; }
+}
+
+// ── Scanbot SDK (UI2 API) ──
+var scanbotSdkInstance = null;
+
+async function openScanbotSDK() {
+  if (typeof ScanbotSDK === 'undefined') {
+    showError('Scanbot SDK ещё загружается. Подождите и попробуйте снова.');
+    startErrorTimer();
+    return;
+  }
+
+  try {
+    if (!scanbotSdkInstance) {
+      scanbotSdkInstance = await ScanbotSDK.initialize({
+        enginePath: 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/bin/complete/',
+        licenseKey: ''
+      });
+    }
+
+    var config = new ScanbotSDK.UI.Config.BarcodeScannerScreenConfiguration();
+    var result = await ScanbotSDK.UI.createBarcodeScanner(config);
+
+    if (result && result.items && result.items.length > 0) {
+      var barcode = result.items[0].barcode;
+      document.getElementById('barcodeInput').value = barcode.text;
+      onSearch();
+    }
+  } catch (err) {
+    console.error('[Scanbot SDK]', err);
+    showError('Scanbot: ' + (err.message || err));
+    startErrorTimer();
+  }
 }
 
 // ── Полноэкранное фото ──
