@@ -1274,44 +1274,51 @@ function closeCamera() {
   }
 }
 
-// ── Scanbot (BarcodeDetector API) ──
+// ── Scanbot (BarcodeDetector + полифил для iOS) ──
 var scanbotStream = null;
 var scanbotAnimFrame = null;
 var scanbotDetector = null;
 
-function openScanbot() {
-  if (!('BarcodeDetector' in window)) {
-    showError('BarcodeDetector не поддерживается. Используйте Chrome на Android.');
-    startErrorTimer();
-    return;
+function getDetectorClass() {
+  if ('BarcodeDetector' in window) {
+    return Promise.resolve(window.BarcodeDetector);
   }
+  return import('https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@2/dist/index.js')
+    .then(function(mod) { return mod.BarcodeDetectorPolyfill; });
+}
+
+function openScanbot() {
   document.getElementById('scanbotOverlay').classList.add('active');
   var video = document.getElementById('scanbotVideo');
   var canvas = document.getElementById('scanbotCanvas');
   var ctx = canvas.getContext('2d');
 
-  if (!scanbotDetector) {
-    scanbotDetector = new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'qr_code', 'data_matrix']
+  getDetectorClass()
+    .then(function(DetectorClass) {
+      if (!scanbotDetector) {
+        scanbotDetector = new DetectorClass({
+          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'qr_code', 'data_matrix']
+        });
+      }
+      return navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+    })
+    .then(function(stream) {
+      scanbotStream = stream;
+      video.srcObject = stream;
+      video.play();
+      video.onloadedmetadata = function() {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        scanFrame();
+      };
+    })
+    .catch(function(e) {
+      closeScanbot();
+      showError('Сканер недоступен: ' + (e.message || e));
+      startErrorTimer();
     });
-  }
-
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-  }).then(function(stream) {
-    scanbotStream = stream;
-    video.srcObject = stream;
-    video.play();
-    video.onloadedmetadata = function() {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      scanFrame();
-    };
-  }).catch(function(e) {
-    closeScanbot();
-    showError('Камера недоступна: ' + (e.message || e));
-    startErrorTimer();
-  });
 
   function scanFrame() {
     if (!scanbotStream) return;
