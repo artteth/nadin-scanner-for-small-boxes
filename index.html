@@ -417,6 +417,7 @@
     .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
     .tbl-model { font-family: monospace; font-weight: 600; }
     .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
+    .tbl-no-photo { width: 22px; height: 22px; display: block; opacity: 0.25; margin: 0 auto; }
     .tbl-pack-sel {
       height: 30px; border: 1.5px solid #d1d5db; border-radius: 6px;
       background: #f9fafb; color: #111827; font-size: 12px;
@@ -432,7 +433,10 @@
     .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
     .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
     @media (max-width: 480px) {
-      .tbl-col-photo { display: none; }
+      .tbl-col-photo { width: 30px; padding: 5px 3px !important; }
+      .tbl-col-photo.tbl-center { text-align: center; }
+      .tbl-thumb { width: 22px; height: 22px; border-radius: 4px; }
+      .tbl-col-photo thead th { font-size: 8px; padding: 9px 3px !important; }
     }
 
     /* ── КАМЕРА ── */
@@ -1234,8 +1238,8 @@ function renderTableView() {
     var isChanged = tableChangedModels.has(item.model);
     var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
     var photoHtml = item.photoUrl
-      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
-      : '';
+      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" style="margin:0 auto" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
+      : '<span style="display:block;text-align:center;font-size:14px;opacity:0.2;line-height:22px">📷</span>';
     var packOpts = '<option value="">—</option>' + TABLE_PACK_TYPES.map(function(pt) {
       return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
     }).join('');
