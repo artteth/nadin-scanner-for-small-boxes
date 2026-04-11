@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v113</title>
+  <title>Сканер упаковки v114</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -378,7 +378,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v113</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v114</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -401,8 +401,8 @@
   </div>
 
   <div id="stateIdle">
-    <p class="barcode-label">Введите или отсканируйте штрих-код</p>
-    <input type="text" id="barcodeInput" placeholder="Штрих-код..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <p class="barcode-label">Введите штрих-код или номер модели</p>
+    <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn btn-primary" onclick="onSearch()">Найти</button>
     <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
   </div>
@@ -675,8 +675,8 @@ function showPreloader(show) {
 }
 
 function onSearch() {
-  const barcode = document.getElementById('barcodeInput').value.trim();
-  if (!barcode) return;
+  const query = document.getElementById('barcodeInput').value.trim();
+  if (!query) return;
 
   // Если данные ещё не загрузились — ждём
   if (!dataLoaded && !dataLoadError) {
@@ -685,17 +685,30 @@ function onSearch() {
     return;
   }
 
-  // Локальный поиск — мгновенно!
-  const item = barcodeToModel[barcode.toString().trim()];
+  // Сначала ищем по штрих-коду, затем по номеру модели
+  let item = barcodeToModel[query];
+  let foundBarcode = query;
+
+  if (!item) {
+    const queryLower = query.toLowerCase();
+    const matchedKey = Object.keys(barcodeToModel).find(function(bc) {
+      return barcodeToModel[bc].model.toLowerCase() === queryLower;
+    });
+    if (matchedKey) {
+      item = barcodeToModel[matchedKey];
+      foundBarcode = matchedKey;
+    }
+  }
+
   if (!item) {
     document.getElementById('pageTitle').style.display = 'none';
-    showError('Штрих-код не найден');
+    showError('Штрих-код или модель не найдены');
     startErrorTimer();
     return;
   }
 
   // Показываем штрих-код, модель и фото
-  document.getElementById('scanBarcode').textContent = 'Штрих-код: ' + barcode;
+  document.getElementById('scanBarcode').textContent = 'Штрих-код: ' + foundBarcode;
   document.getElementById('scanModel').textContent = 'Модель: ' + item.model;
   // Фото или "фото не найдено"
   const photoEl = document.getElementById('scanPhoto');
@@ -717,7 +730,7 @@ function onSearch() {
   if (item.repacked) {
     document.getElementById('scanInfo').classList.add('hidden');
     document.getElementById('pageTitle').style.display = 'none';
-    document.getElementById('packedBarcode').textContent = barcode;
+    document.getElementById('packedBarcode').textContent = foundBarcode;
     document.getElementById('packedModel').textContent = item.model;
     document.getElementById('packedType').textContent = item.packType || '(тип не указан)';
     const pPhoto = document.getElementById('packedPhoto');
