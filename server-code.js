@@ -41,61 +41,67 @@ function getPhotoMapping() {
 }
 
 function doGet(e) {
-  const params = e ? e.parameter : null;
+  const params = e ? e.parameter : {};
   const action = params ? params.action : null;
   const page = params ? params.page : null;
+  const callback = params ? (params.callback || '') : '';
 
-  const createResponse = (data) => {
-    return ContentService.createTextOutput(JSON.stringify(data))
+  // JSONP-aware response: оборачивает в callback(data) если передан callback
+  const sendResult = (data) => {
+    const json = JSON.stringify(data);
+    if (callback) {
+      return ContentService.createTextOutput(callback + '(' + json + ')')
+          .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(json)
         .setMimeType(ContentService.MimeType.JSON)
         .setHeader("Access-Control-Allow-Origin", "*")
         .setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         .setHeader("Access-Control-Allow-Headers", "Content-Type");
   };
 
+  if (action === 'getAllBarcodes') {
+    try { return sendResult(getAllBarcodes()); }
+    catch(err) { return sendResult({ error: err.message }); }
+  }
+
   if (action === 'getData') {
-    try {
-      const data = getData();
-      return createResponse(data);
-    } catch(err) {
-      return createResponse({ error: err.message });
-    }
+    try { return sendResult(getData()); }
+    catch(err) { return sendResult({ error: err.message }); }
   }
 
   if (action === 'saveData') {
     try {
-      const dataStr = e.parameter.data || e.postData.contents;
+      const dataStr = params.data || (e.postData ? e.postData.contents : '[]');
       const updates = JSON.parse(dataStr);
-      const result = saveData(updates);
-      return createResponse({ success: true, result: result });
-    } catch(err) {
-      return createResponse({ error: err.message });
-    }
+      return sendResult({ success: true, result: saveData(updates) });
+    } catch(err) { return sendResult({ error: err.message }); }
   }
 
   if (action === 'lookupBarcode') {
     try {
-      const barcode = params.barcode || '';
-      const result = lookupBarcode(barcode);
-      return createResponse(result);
-    } catch(err) {
-      return createResponse({ error: err.message });
-    }
+      return sendResult(lookupBarcode(params.barcode || ''));
+    } catch(err) { return sendResult({ error: err.message }); }
   }
 
   if (action === 'savePackaging') {
     try {
+      return sendResult(savePackaging(params.model || '', params.packType || ''));
+    } catch(err) { return sendResult({ error: err.message }); }
+  }
+
+  // Новое: сохраняет и repacked, и packType (позволяет снять галочку)
+  if (action === 'saveItem') {
+    try {
       const model = params.model || '';
+      const repacked = params.repacked === 'true';
       const packType = params.packType || '';
-      const result = savePackaging(model, packType);
-      return createResponse(result);
-    } catch(err) {
-      return createResponse({ error: err.message });
-    }
+      return sendResult(saveItem(model, repacked, packType));
+    } catch(err) { return sendResult({ error: err.message }); }
   }
 
   if (page === 'scanner') {
-    return HtmlService.createHtmlOutputFromFile('сканер')
+    return HtmlService.createHtmlOutputFromFile('index')
         .setTitle("Сканер упаковки");
   }
 
@@ -108,7 +114,6 @@ function lookupBarcode(barcode) {
 
   const ss = getSpreadsheet();
 
-  // Ищем штрих-код в листе Спецификация, колонка C (3)
   const specSheet = ss.getSheetByName(SPEC_SHEET_NAME);
   if (!specSheet) return { found: false, error: 'Лист "Спецификация" не найден' };
 
@@ -116,7 +121,6 @@ function lookupBarcode(barcode) {
   if (lastSpecRow < SPEC_DATA_START_ROW) return { found: false, error: 'Штрих-код не найден' };
 
   const numSpecRows = lastSpecRow - SPEC_DATA_START_ROW + 1;
-  // Читаем колонки A и C
   const specData = specSheet.getRange(SPEC_DATA_START_ROW, 1, numSpecRows, 3).getValues();
 
   let model = null;
@@ -130,7 +134,6 @@ function lookupBarcode(barcode) {
 
   if (!model) return { found: false, error: 'Штрих-код не найден в Спецификации' };
 
-  // Ищем модель в листе WB, колонка D (4)
   const wbSheet = ss.getSheetByName(SHEET_NAME);
   if (!wbSheet) return { found: false, error: 'Лист WB не найден' };
 
@@ -168,7 +171,7 @@ function savePackaging(model, packType) {
   if (lastRow < 6) return { success: false, error: 'Нет данных в листе WB' };
 
   const numRows = lastRow - 5;
-  const data = sheet.getRange(6, 4, numRows, 1).getValues(); // только колонка D
+  const data = sheet.getRange(6, 4, numRows, 1).getValues();
 
   for (let i = 0; i < data.length; i++) {
     const rowModel = data[i][0];
@@ -176,6 +179,35 @@ function savePackaging(model, packType) {
       const rowNum = 6 + i;
       sheet.getRange(rowNum, 43).setValue(true);   // AQ — упаковано
       sheet.getRange(rowNum, 45).setValue(packType); // AS — тип упаковки
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Модель "' + model + '" не найдена' };
+}
+
+/**
+ * Сохраняет и статус упаковки (repacked), и тип упаковки.
+ * В отличие от savePackaging, позволяет снять отметку (repacked=false).
+ */
+function saveItem(model, repacked, packType) {
+  if (!model) return { success: false, error: 'Модель не указана' };
+
+  const sheet = getSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) return { success: false, error: 'Лист WB не найден' };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 6) return { success: false, error: 'Нет данных в листе WB' };
+
+  const numRows = lastRow - 5;
+  const data = sheet.getRange(6, 4, numRows, 1).getValues();
+
+  for (let i = 0; i < data.length; i++) {
+    const rowModel = data[i][0];
+    if (rowModel && rowModel.toString().trim() === model.toString().trim()) {
+      const rowNum = 6 + i;
+      sheet.getRange(rowNum, 43).setValue(repacked === true); // AQ
+      sheet.getRange(rowNum, 45).setValue(packType || '');    // AS
       return { success: true };
     }
   }
@@ -254,15 +286,15 @@ function saveData(updates) {
 }
 
 /**
- * Возвращает все штрих-коды → модели + статусы упаковки.
- * Используется сканером для предзагрузки данных при старте страницы.
- * Поиск работает локально — без вызова сервера при каждом сканировании.
+ * Возвращает все штрих-коды → модели + статусы упаковки + тип изделия + фото.
+ * Используется сканером для предзагрузки всех данных при старте.
+ * Также используется таблицей всех изделий.
  */
 function getAllBarcodes() {
   try {
     const ss = getSpreadsheet();
 
-    // 1. Загружаем Спецификацию: колонки A (модель) и C (штрих-код)
+    // 1. Спецификация: A (модель) и C (штрих-код)
     const specSheet = ss.getSheetByName(SPEC_SHEET_NAME);
     if (!specSheet) return { error: 'Лист "Спецификация" не найден' };
 
@@ -272,17 +304,16 @@ function getAllBarcodes() {
     const numSpecRows = lastSpecRow - SPEC_DATA_START_ROW + 1;
     const specData = specSheet.getRange(SPEC_DATA_START_ROW, 1, numSpecRows, 3).getValues();
 
-    // barcode → model
     const barcodeToModel = {};
     specData.forEach(row => {
-      const model = row[0]; // колонка A
-      const barcode = row[2]; // колонка C
+      const model = row[0]; // A
+      const barcode = row[2]; // C
       if (barcode && model) {
         barcodeToModel[barcode.toString().trim()] = model.toString().trim();
       }
     });
 
-    // 2. Загружаем WB: колонки D (модель), AQ (repacked), AS (packType)
+    // 2. WB: C (тип), D (модель), AQ (repacked), AS (packType)
     const wbSheet = ss.getSheetByName(SHEET_NAME);
     if (!wbSheet) return { error: 'Лист WB не найден' };
 
@@ -290,33 +321,37 @@ function getAllBarcodes() {
     if (lastWbRow < 6) return { barcodes: {} };
 
     const numWbRows = lastWbRow - 5;
-    // D=4, AQ=43, AS=45 — читаем с 1 по 45
     const wbData = wbSheet.getRange(6, 1, numWbRows, 45).getValues();
 
-    // model → { repacked, packType }
+    // 3. Фотографии
+    const photoMapping = getPhotoMapping();
+
     const modelStatus = {};
     wbData.forEach(row => {
-      const model = row[3]; // колонка D
+      const model = row[3]; // D
       if (model) {
-        const repacked = row[42]; // колонка AQ
-        const packType = row[44]; // колонка AS
+        const repacked = row[42]; // AQ
+        const packType = row[44]; // AS
         const isPacked = repacked === true || repacked === 1 || repacked === 'TRUE' || repacked === 'true';
         modelStatus[model.toString().trim()] = {
           repacked: isPacked,
-          packType: packType ? packType.toString() : ''
+          packType: packType ? packType.toString() : '',
+          type: (row[2] || '').toString()  // C = тип изделия
         };
       }
     });
 
-    // 3. Собираем: barcode → { model, repacked, packType }
+    // 4. Сборка: barcode → { model, repacked, packType, type, photoUrl }
     const result = {};
     Object.keys(barcodeToModel).forEach(barcode => {
       const model = barcodeToModel[barcode];
-      const status = modelStatus[model] || { repacked: false, packType: '' };
+      const status = modelStatus[model] || { repacked: false, packType: '', type: '' };
       result[barcode] = {
         model: model,
         repacked: status.repacked,
-        packType: status.packType
+        packType: status.packType,
+        type: status.type,
+        photoUrl: photoMapping[model] || null
       };
     });
 

@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v114</title>
+  <title>Сканер упаковки v115</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -306,6 +306,128 @@
     }
     .settings-preview-label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
 
+    /* ── ТАБЛИЦА ИЗДЕЛИЙ ── */
+    .table-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50000;
+      background: #f0f4f8;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .table-overlay.active { transform: translateY(0); }
+    .tbl-topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1e293b;
+      color: white;
+      padding: 12px 16px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      flex-shrink: 0;
+    }
+    .tbl-back-btn {
+      background: rgba(255,255,255,0.15);
+      border: none; color: white;
+      padding: 7px 12px; border-radius: 8px;
+      font-size: clamp(13px, 3.5vw, 15px);
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    .tbl-back-btn:active { background: rgba(255,255,255,0.3); }
+    .tbl-title { flex: 1; font-size: clamp(14px, 4vw, 17px); font-weight: 600; text-align: center; }
+    .tbl-stats { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.75); white-space: nowrap; flex-shrink: 0; }
+    .tbl-tabs-wrap {
+      display: flex;
+      overflow-x: auto;
+      gap: 8px;
+      padding: 10px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tbl-tabs-wrap::-webkit-scrollbar { display: none; }
+    .tbl-tab {
+      height: 34px; padding: 0 14px;
+      border-radius: 17px;
+      border: 1.5px solid #d1d5db;
+      background: white;
+      font-size: clamp(12px, 3.5vw, 14px); font-weight: 600;
+      color: #374151; cursor: pointer;
+      white-space: nowrap; flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .tbl-tab.active { background: #15803d; color: white; border-color: #15803d; }
+    .tbl-search-wrap {
+      padding: 8px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+    .tbl-search-wrap input {
+      width: 100%; height: 40px;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      padding: 0 14px; font-size: clamp(14px, 3.5vw, 16px);
+      color: #111827; background: #f9fafb; outline: none;
+    }
+    .tbl-search-wrap input:focus { border-color: #15803d; }
+    .tbl-stats-bar {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; padding: 8px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+    .tbl-stat { background: #f8fafc; border-radius: 8px; padding: 8px 12px; }
+    .tbl-stat-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.04em; }
+    .tbl-stat-val { font-size: 20px; font-weight: 700; color: #111827; }
+    .tbl-stat-val.green { color: #15803d; }
+    .tbl-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tbl-table { width: 100%; border-collapse: collapse; min-width: 340px; }
+    .tbl-table thead th {
+      background: #1e293b; color: white;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 9px 10px; text-align: left;
+      position: sticky; top: 0; z-index: 5;
+      white-space: nowrap;
+    }
+    .tbl-table thead th.tbl-center { text-align: center; }
+    .tbl-table tbody tr { border-bottom: 1px solid #f3f4f6; background: white; transition: background 0.1s; }
+    .tbl-table tbody tr:last-child { border-bottom: none; }
+    .tbl-table tbody tr:hover { background: #f9fafb; }
+    .tbl-table tbody tr.is-packed { background: #f0fdf4; }
+    .tbl-table tbody tr.is-packed:hover { background: #dcfce7; }
+    .tbl-table tbody tr.tbl-changed { background: #fefce8; }
+    .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
+    .tbl-model { font-family: monospace; font-weight: 600; }
+    .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
+    .tbl-pack-sel {
+      height: 30px; border: 1.5px solid #d1d5db; border-radius: 6px;
+      background: #f9fafb; color: #111827; font-size: 12px;
+      padding: 0 6px; cursor: pointer; max-width: 170px; width: 100%;
+    }
+    .tbl-pack-sel:focus { outline: none; border-color: #15803d; }
+    .tbl-save-btn {
+      height: 28px; padding: 0 10px; font-size: 12px;
+      border: 1.5px solid #15803d; border-radius: 6px;
+      background: #15803d; color: white; cursor: pointer; white-space: nowrap;
+    }
+    .tbl-save-btn:active { background: #166534; }
+    .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
+    .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
+    @media (max-width: 480px) {
+      .tbl-col-photo { display: none; }
+    }
+
     /* ── КАМЕРА ── */
     .camera-overlay {
       position: fixed;
@@ -378,7 +500,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v114</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v115</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -405,6 +527,7 @@
     <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn btn-primary" onclick="onSearch()">Найти</button>
     <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
+    <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
   </div>
 
   <!-- ALREADY_PACKED -->
@@ -895,6 +1018,193 @@ function showError(msg) {
   showState('stateError');
 }
 
+// ── Таблица всех изделий ──
+var tableActiveType = '';
+var tableChangedModels = new Set();
+var TABLE_PACK_TYPES = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
+
+function openTableView() {
+  buildTypeTabs();
+  renderTableView();
+  document.getElementById('tableView').classList.add('active');
+  document.getElementById('tblSearch').value = '';
+  document.getElementById('tblSearch').focus();
+}
+
+function closeTableView() {
+  if (tableChangedModels.size > 0) {
+    if (!confirm('Есть несохранённые изменения. Закрыть без сохранения?')) return;
+    tableChangedModels.clear();
+  }
+  document.getElementById('tableView').classList.remove('active');
+}
+
+function buildTypeTabs() {
+  var types = new Set();
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (item.type) types.add(item.type);
+  });
+  types = Array.from(types).sort();
+
+  var wrap = document.getElementById('tblTabsWrap');
+  if (!types.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  wrap.innerHTML = [''].concat(types).map(function(t) {
+    var active = tableActiveType === t ? ' active' : '';
+    var label = t || 'Все';
+    return '<button class="tbl-tab' + active + '" data-type="' + esc(t) + '">' + esc(label) + '</button>';
+  }).join('');
+
+  wrap.querySelectorAll('.tbl-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tableActiveType = this.dataset.type;
+      wrap.querySelectorAll('.tbl-tab').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      renderTableView();
+    });
+  });
+}
+
+function getTableModels() {
+  var search = (document.getElementById('tblSearch').value || '').toLowerCase().trim();
+  var seen = {};
+  var models = [];
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (seen[item.model]) return;
+    seen[item.model] = true;
+    if (tableActiveType && item.type !== tableActiveType) return;
+    if (search && item.model.toLowerCase().indexOf(search) === -1) return;
+    models.push(item);
+  });
+  models.sort(function(a, b) {
+    if (a.repacked !== b.repacked) return a.repacked ? 1 : -1;
+    return (a.model || '').localeCompare(b.model || '');
+  });
+  return models;
+}
+
+function renderTableView() {
+  var models = getTableModels();
+  var tbody = document.getElementById('tblBody');
+  var empty = document.getElementById('tblEmpty');
+
+  // Считаем статистику по всем изделиям (без фильтра)
+  var allSeen = {}, total = 0, packed = 0;
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (allSeen[item.model]) return;
+    allSeen[item.model] = true;
+    total++; if (item.repacked) packed++;
+  });
+  document.getElementById('tblTotal').textContent = total;
+  document.getElementById('tblPacked').textContent = packed;
+  document.getElementById('tblHeaderStats').textContent = packed + '\u00a0/\u00a0' + total;
+
+  if (!models.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = models.map(function(item) {
+    var isChanged = tableChangedModels.has(item.model);
+    var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+    var photoHtml = item.photoUrl
+      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
+      : '';
+    var packOpts = '<option value="">—</option>' + TABLE_PACK_TYPES.map(function(pt) {
+      return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
+    }).join('');
+    var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+    return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
+      + '<td class="tbl-model">' + esc(item.model) + '</td>'
+      + '<td class="tbl-col-photo">' + photoHtml + '</td>'
+      + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
+      + '<td><select class="tbl-pack-sel">' + packOpts + '</select></td>'
+      + '<td>' + saveBtn + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+// Делегирование событий таблицы
+document.getElementById('tblBody').addEventListener('change', function(e) {
+  var tr = e.target.closest('tr[data-model]');
+  if (!tr) return;
+  var model = tr.dataset.model;
+  if (e.target.type === 'checkbox') {
+    tblSetRepacked(model, e.target.checked, tr);
+  } else if (e.target.classList.contains('tbl-pack-sel')) {
+    tblSetPackType(model, e.target.value, tr);
+  }
+});
+document.getElementById('tblBody').addEventListener('click', function(e) {
+  if (!e.target.classList.contains('tbl-save-btn')) return;
+  var tr = e.target.closest('tr[data-model]');
+  if (tr) saveTableItem(tr.dataset.model, e.target);
+});
+
+function tblSetRepacked(model, checked, tr) {
+  Object.keys(barcodeToModel).forEach(function(bc) {
+    if (barcodeToModel[bc].model === model) barcodeToModel[bc].repacked = checked;
+  });
+  tableChangedModels.add(model);
+  tblRefreshRow(tr, model);
+  tblUpdateStats();
+}
+
+function tblSetPackType(model, packType, tr) {
+  Object.keys(barcodeToModel).forEach(function(bc) {
+    if (barcodeToModel[bc].model === model) barcodeToModel[bc].packType = packType;
+  });
+  tableChangedModels.add(model);
+  tblRefreshRow(tr, model);
+}
+
+function tblRefreshRow(tr, model) {
+  var item = Object.values(barcodeToModel).find(function(i) { return i.model === model; });
+  if (!item) return;
+  var isChanged = tableChangedModels.has(model);
+  tr.className = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+  var lastTd = tr.lastElementChild;
+  lastTd.innerHTML = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+}
+
+function tblUpdateStats() {
+  var seen = {}, total = 0, packed = 0;
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (seen[item.model]) return;
+    seen[item.model] = true;
+    total++; if (item.repacked) packed++;
+  });
+  document.getElementById('tblTotal').textContent = total;
+  document.getElementById('tblPacked').textContent = packed;
+  document.getElementById('tblHeaderStats').textContent = packed + '\u00a0/\u00a0' + total;
+}
+
+function saveTableItem(model, btn) {
+  var item = Object.values(barcodeToModel).find(function(i) { return i.model === model; });
+  if (!item) return;
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  apiCall('saveItem', { model: model, repacked: item.repacked ? 'true' : 'false', packType: item.packType || '' })
+    .then(function(result) {
+      if (result && result.success) {
+        tableChangedModels.delete(model);
+        var tr = document.querySelector('#tblBody tr[data-model="' + esc(model) + '"]');
+        if (tr) tblRefreshRow(tr, model);
+      } else {
+        if (btn) { btn.textContent = 'Записать'; btn.disabled = false; }
+        alert('Ошибка: ' + ((result && result.error) || 'неизвестно'));
+      }
+    });
+}
+
+function esc(str) {
+  return (str || '').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 // ── Камера ──
 var codeReader = null;
 var zxingLoaded = false;
@@ -1044,6 +1354,38 @@ window.onload = function() {
 
     <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
     <button class="btn btn-secondary" onclick="closeSettings()" style="margin-top:10px">Отмена</button>
+  </div>
+</div>
+
+<!-- Таблица всех изделий -->
+<div id="tableView" class="table-overlay">
+  <div class="tbl-topbar">
+    <button class="tbl-back-btn" onclick="closeTableView()">← Сканер</button>
+    <span class="tbl-title">Все изделия</span>
+    <span class="tbl-stats" id="tblHeaderStats"></span>
+  </div>
+  <div class="tbl-tabs-wrap" id="tblTabsWrap"></div>
+  <div class="tbl-stats-bar">
+    <div class="tbl-stat"><div class="tbl-stat-label">Всего</div><div class="tbl-stat-val" id="tblTotal">0</div></div>
+    <div class="tbl-stat"><div class="tbl-stat-label">Упаковано</div><div class="tbl-stat-val green" id="tblPacked">0</div></div>
+  </div>
+  <div class="tbl-search-wrap">
+    <input type="text" id="tblSearch" placeholder="🔍 Поиск по номеру модели..." oninput="renderTableView()">
+  </div>
+  <div class="tbl-scroll">
+    <table class="tbl-table">
+      <thead>
+        <tr>
+          <th>Модель</th>
+          <th class="tbl-col-photo">Фото</th>
+          <th class="tbl-center">Упак.</th>
+          <th>Коробка / пакет</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tblBody"></tbody>
+    </table>
+    <div id="tblEmpty" class="tbl-empty" style="display:none">Нет данных</div>
   </div>
 </div>
 
