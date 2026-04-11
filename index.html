@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v118</title>
+  <title>Сканер упаковки v119</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -487,7 +487,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v118</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v119</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1058,6 +1058,18 @@ function buildTypeTabs() {
   });
 }
 
+// Разбирает «1-11711/1» → { type:1, model:11711, design:1 }
+function parseModelNum(m) {
+  m = (m || '').toString();
+  var dash = m.indexOf('-');
+  if (dash === -1) return { type: 999999, model: 999999, design: 0 };
+  var slash = m.indexOf('/', dash);
+  var type   = parseInt(m.slice(0, dash))                          || 0;
+  var model  = parseInt(slash > dash ? m.slice(dash+1, slash) : m.slice(dash+1)) || 0;
+  var design = parseInt(slash > dash ? m.slice(slash+1) : '0')    || 0;
+  return { type: type, model: model, design: design };
+}
+
 function getTableModels() {
   var search = (document.getElementById('tblSearch').value || '').toLowerCase().trim();
   var seen = {};
@@ -1071,7 +1083,10 @@ function getTableModels() {
   });
   models.sort(function(a, b) {
     if (a.repacked !== b.repacked) return a.repacked ? -1 : 1; // упакованные первыми
-    return (a.model || '').localeCompare(b.model || '');
+    var pa = parseModelNum(a.model), pb = parseModelNum(b.model);
+    if (pa.type !== pb.type) return pa.type - pb.type;
+    if (pa.model !== pb.model) return pa.model - pb.model;
+    return pa.design - pb.design;
   });
   return models;
 }
