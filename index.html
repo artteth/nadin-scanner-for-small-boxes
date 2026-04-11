@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#15803d">
+
+  <title>Сканер упаковки v120</title>
+  <style>
+    :root {
+      --pack-font-size: 56px;
+      --pack-font-family: Arial, sans-serif;
+      --pack-color: #15803d;
+      --pack-font-weight: 700;
+      --photo-max-height: 300px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html {
+      height: 100%;
+      height: -webkit-fill-available;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f4f8;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      min-height: -webkit-fill-available;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(8px, 2vw, 16px);
+      padding-top: max(clamp(8px, 2vw, 16px), env(safe-area-inset-top));
+      padding-bottom: max(clamp(8px, 2vw, 16px), env(safe-area-inset-bottom));
+      padding-left: max(clamp(8px, 2vw, 16px), env(safe-area-inset-left));
+      padding-right: max(clamp(8px, 2vw, 16px), env(safe-area-inset-right));
+      box-sizing: border-box;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .card {
+      background: white;
+      border-radius: clamp(12px, 3vw, 20px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      padding: clamp(12px, 3vw, 28px) clamp(12px, 3vw, 24px);
+      width: 100%;
+      max-width: min(600px, 95vw);
+      max-height: calc(100dvh - 2 * clamp(8px, 2vw, 16px));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      box-sizing: border-box;
+    }
+
+    .card-header {
+      position: relative;
+      margin: 0 0 clamp(12px, 3vw, 24px);
+    }
+    h1 {
+      font-size: clamp(24px, 6vw, 48px);
+      font-weight: 700;
+      color: #111827;
+      margin: 0;
+      text-align: center;
+      line-height: 1.2;
+      padding-right: clamp(28px, 7vw, 44px);
+    }
+    .settings-btn {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      font-size: clamp(20px, 5vw, 32px);
+      cursor: pointer;
+      padding: 2px 4px;
+      color: #9ca3af;
+      line-height: 1;
+    }
+
+    /* ── IDLE состояние ── */
+    .barcode-label {
+      font-size: clamp(16px, 4vw, 28px);
+      color: #6b7280;
+      margin: 0 0 clamp(6px, 1.5vw, 12px);
+      text-align: center;
+    }
+    #barcodeInput {
+      width: 100%;
+      height: clamp(56px, 15vw, 112px);
+      font-size: clamp(22px, 6vw, 44px);
+      border: 2px solid #d1d5db;
+      border-radius: 12px;
+      padding: 0 16px;
+      outline: none;
+      letter-spacing: 2px;
+      color: #111827;
+    }
+    #barcodeInput:focus { border-color: #15803d; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      height: clamp(56px, 15vw, 112px);
+      border: none;
+      border-radius: clamp(8px, 2vw, 24px);
+      font-size: clamp(18px, 5vw, 36px);
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: clamp(8px, 2vw, 14px);
+    }
+    .btn-primary { background: #15803d; color: white; margin-top: clamp(12px, 3vw, 24px); }
+    .btn-primary:active { background: #166534; }
+    .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+    .btn-secondary:active { background: #e5e7eb; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:active { background: #b91c1c; }
+
+    /* ── ALREADY_PACKED состояние ── */
+    .packed-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
+    .packed-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
+    .packed-icon-small { font-size: 24px; }
+    .packed-title-inline { font-size: 20px; font-weight: 700; color: #15803d; }
+    .packed-photo { text-align: center; margin: 4px 0 0; }
+    .packed-photo img { max-width: 100%; max-height: var(--photo-max-height); border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
+    .packed-barcode { font-size: 20px; color: #111827; text-align: center; font-weight: 700; margin-bottom: 4px; font-family: monospace; }
+    .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 2px; font-family: monospace; }
+    .packed-type { font-size: var(--pack-font-size); font-family: var(--pack-font-family); color: var(--pack-color); font-weight: var(--pack-font-weight); text-align: center; margin-bottom: 8px; line-height: 1.2; }
+
+    .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
+    .btn-ok:active { background: #166534; }
+    .timer-bar {
+      position: absolute;
+      bottom: 0; left: 0;
+      height: 5px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 0 0 12px 12px;
+      transition: width 1s linear;
+    }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+    .btn-row .btn { margin-top: 0; }
+
+    /* ── SELECT_PACK состояние ── */
+    .select-label { font-size: 15px; color: #374151; margin-bottom: 8px; font-weight: 600; }
+    .select-model { font-size: 13px; color: #9ca3af; margin-bottom: 16px; font-family: monospace; }
+    select#packSelect {
+      width: 100%;
+      height: 56px;
+      font-size: 17px;
+      border: 2px solid #d1d5db;
+      border-radius: 12px;
+      padding: 0 12px;
+      outline: none;
+      color: #111827;
+      background: #f9fafb;
+      margin-bottom: 4px;
+    }
+    select#packSelect:focus { border-color: #15803d; }
+    .pack-btn {
+      display: block;
+      width: 100%;
+      height: 64px;
+      border: 2px solid #d1d5db;
+      border-radius: 14px;
+      background: #f9fafb;
+      color: #111827;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: all 0.15s;
+    }
+    .pack-btn:hover { border-color: #15803d; background: #f0fdf4; }
+    .pack-btn:active { transform: scale(0.97); }
+    .pack-btn.selected { border-color: #15803d; background: #15803d; color: white; }
+
+    /* ── SAVING состояние ── */
+    .saving-wrap { text-align: center; padding: 20px 0; }
+    .spinner {
+      width: 56px; height: 56px;
+      border: 6px solid #e5e7eb;
+      border-top: 6px solid #15803d;
+      border-radius: 50%;
+      animation: spin 1.2s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .saving-text { font-size: 16px; color: #6b7280; }
+
+    /* ── SUCCESS состояние ── */
+    .success-wrap { text-align: center; padding: 20px 0; }
+    .success-icon { font-size: 56px; margin-bottom: 12px; }
+    .success-text { font-size: 20px; font-weight: 700; color: #15803d; }
+
+    /* ── ERROR состояние ── */
+    .error-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
+    .error-text { font-size: 16px; color: #dc2626; text-align: center; margin-bottom: 24px; line-height: 1.5; }
+
+    /* Информация о сканировании */
+    .scan-info { background: #f8fafc; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; text-align: center; }
+    .scan-barcode { font-size: 18px; color: #111827; margin-bottom: 4px; font-family: monospace; font-weight: 700; }
+    .scan-model { font-size: 18px; font-weight: 700; color: #111827; font-family: monospace; margin-bottom: 8px; }
+    .scan-photo { text-align: center; margin: 12px 0 0; }
+    .scan-photo img { max-width: 100%; max-height: var(--photo-max-height); border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .no-photo { color: #9ca3af; font-size: 14px; font-style: italic; margin: 12px 0; }
+
+    /* Полноэкранное фото */
+    .photo-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99999;
+      background: rgba(0,0,0,0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      touch-action: none;
+      -webkit-overflow-scrolling: none;
+    }
+    .photo-overlay.active { display: flex; }
+    .photo-overlay img {
+      max-width: calc(100vw - 2 * env(safe-area-inset-left, 0px));
+      max-height: calc(100vh - 2 * env(safe-area-inset-top, 0px));
+      max-width: calc(100dvw - 16px);
+      max-height: calc(100dvh - 16px);
+      border-radius: 8px;
+      box-shadow: 0 0 60px rgba(0,0,0,0.5);
+      object-fit: contain;
+    }
+
+    /* ── НАСТРОЙКИ ── */
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99997;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .settings-overlay.active { display: flex; }
+    .settings-panel {
+      background: white;
+      width: 100%;
+      max-width: min(600px, 100vw);
+      max-height: 88dvh;
+      border-radius: 20px 20px 0 0;
+      padding: clamp(16px, 4vw, 28px);
+      padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .settings-title { font-size: clamp(18px, 5vw, 24px); font-weight: 700; color: #111827; }
+    .settings-close-btn {
+      background: #f3f4f6; border: none;
+      width: 36px; height: 36px; border-radius: 50%;
+      font-size: 18px; cursor: pointer; color: #374151;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .settings-group { margin-bottom: 18px; }
+    .settings-label { font-size: clamp(13px, 3.5vw, 15px); color: #374151; margin-bottom: 8px; font-weight: 600; }
+    .settings-select {
+      width: 100%; height: 48px; font-size: 16px;
+      border: 2px solid #d1d5db; border-radius: 10px;
+      padding: 0 12px; color: #111827; background: #f9fafb; outline: none;
+    }
+    .settings-select:focus { border-color: #15803d; }
+    .settings-range { width: 100%; accent-color: #15803d; cursor: pointer; margin-top: 4px; }
+    .settings-color {
+      width: 64px; height: 48px;
+      border: 2px solid #d1d5db; border-radius: 10px;
+      cursor: pointer; padding: 4px; background: white;
+    }
+    .settings-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: clamp(14px, 4vw, 17px);
+      color: #374151;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-checkbox-label input[type=checkbox] {
+      width: 22px; height: 22px;
+      accent-color: #15803d;
+      cursor: pointer;
+    }
+    .settings-preview-box {
+      background: #f8fafc; border-radius: 12px;
+      padding: 12px 16px; text-align: center; margin-bottom: 16px;
+    }
+    .settings-preview-label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+
+    /* ── ТАБЛИЦА ИЗДЕЛИЙ ── */
+    .table-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50000;
+      background: #f0f4f8;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .table-overlay.active { transform: translateY(0); }
+    .tbl-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1e293b;
+      color: white;
+      padding: 12px 16px;
+      padding-top: max(12px, env(safe-area-inset-top));
+    }
+    .tbl-back-btn {
+      background: rgba(255,255,255,0.15);
+      border: none; color: white;
+      padding: 7px 12px; border-radius: 8px;
+      font-size: clamp(13px, 3.5vw, 15px);
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    .tbl-back-btn:active { background: rgba(255,255,255,0.3); }
+    .tbl-title { flex: 1; font-size: clamp(14px, 4vw, 17px); font-weight: 600; text-align: center; }
+    .tbl-stats { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.75); white-space: nowrap; flex-shrink: 0; }
+    .tbl-tabs-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .tbl-tab {
+      height: 34px; padding: 0 14px;
+      border-radius: 17px;
+      border: 1.5px solid #d1d5db;
+      background: white;
+      font-size: clamp(12px, 3.5vw, 14px); font-weight: 600;
+      color: #374151; cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tbl-tab.active { background: #15803d; color: white; border-color: #15803d; }
+    .tbl-search-wrap {
+      padding: 8px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .tbl-search-wrap input {
+      width: 100%; height: 40px;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      padding: 0 14px; font-size: clamp(14px, 3.5vw, 16px);
+      color: #111827; background: #f9fafb; outline: none;
+    }
+    .tbl-search-wrap input:focus { border-color: #15803d; }
+    .tbl-scroll {
+      overflow-x: visible;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tbl-table { width: 100%; border-collapse: collapse; min-width: 340px; }
+    .tbl-table thead th {
+      background: #1e293b; color: white;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 9px 10px; text-align: left;
+      position: sticky;
+      top: var(--tbl-topbar-h, 48px);
+      z-index: 5;
+      white-space: nowrap;
+    }
+    .tbl-table thead th.tbl-center { text-align: center; }
+    .tbl-table tbody tr { border-bottom: 1px solid #f3f4f6; background: white; transition: background 0.1s; }
+    .tbl-table tbody tr:last-child { border-bottom: none; }
+    .tbl-table tbody tr:hover { background: #f9fafb; }
+    .tbl-table tbody tr.is-packed { background: #f0fdf4; }
+    .tbl-table tbody tr.is-packed:hover { background: #dcfce7; }
+    .tbl-table tbody tr.tbl-changed { background: #fefce8; }
+    .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
+    .tbl-model { font-family: monospace; font-weight: 600; }
+    .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
+    .tbl-pack-sel {
+      height: 30px; border: 1.5px solid #d1d5db; border-radius: 6px;
+      background: #f9fafb; color: #111827; font-size: 12px;
+      padding: 0 6px; cursor: pointer; max-width: 170px; width: 100%;
+    }
+    .tbl-pack-sel:focus { outline: none; border-color: #15803d; }
+    .tbl-save-btn {
+      height: 28px; padding: 0 10px; font-size: 12px;
+      border: 1.5px solid #15803d; border-radius: 6px;
+      background: #15803d; color: white; cursor: pointer; white-space: nowrap;
+    }
+    .tbl-save-btn:active { background: #166534; }
+    .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
+    .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
+    @media (max-width: 480px) {
+      .tbl-col-photo { display: none; }
+    }
+
+    /* ── КАМЕРА ── */
+    .camera-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99998;
+      background: black;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .camera-overlay.active { display: flex; }
+    #cameraVideo {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .scan-zone {
+      position: relative;
+      z-index: 1;
+      width: min(80vw, 360px);
+      height: min(28vw, 120px);
+      border: 3px solid #15803d;
+      border-radius: 14px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+      overflow: hidden;
+    }
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #15803d, transparent);
+      animation: scanMove 2s ease-in-out infinite;
+      top: 10%;
+    }
+    @keyframes scanMove {
+      0%, 100% { top: 10%; }
+      50% { top: 85%; }
+    }
+    .camera-close-btn {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: 16px;
+      z-index: 2;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.4);
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .camera-hint {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
+      z-index: 2;
+      color: rgba(255,255,255,0.85);
+      font-size: clamp(14px, 4vw, 18px);
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    /* ── SCANBOT ── */
+    #scanbotOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99999;
+      background: black;
+      display: none;
+      flex-direction: column;
+    }
+    #scanbotOverlay.active { display: flex; }
+    #scanbotContainer {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Утилиты */
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="card-header">
+    <h1 id="pageTitle">📦 Сканер упаковки v120</h1>
+    <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
+  </div>
+
+  <!-- Прелоадер — показывается при загрузке данных -->
+  <div id="preloader" class="hidden">
+    <div class="saving-wrap">
+      <div class="spinner"></div>
+      <div class="saving-text">Загружаю данные...</div>
+    </div>
+  </div>
+
+  <!-- IDLE -->
+  <!-- Информация о текущем сканировании -->
+  <div id="scanInfo" class="scan-info hidden">
+    <div class="scan-barcode" id="scanBarcode"></div>
+    <div class="scan-model" id="scanModel"></div>
+    <div class="scan-photo" id="scanPhoto">
+      <!-- заполняется из JS -->
+    </div>
+  </div>
+
+  <div id="stateIdle">
+    <p class="barcode-label">Введите штрих-код или номер модели</p>
+    <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="btn btn-primary" onclick="onSearch()">Найти</button>
+    <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
+    <button class="btn btn-secondary" onclick="openScanbot()">📱 Сканировать Scanbot</button>
+    <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
+  </div>
+
+  <!-- ALREADY_PACKED -->
+  <div id="stateAlreadyPacked" class="hidden">
+    <div class="packed-header">
+      <span class="packed-icon-small">✅</span>
+      <span class="packed-title-inline">Уже упаковано</span>
+    </div>
+    <div class="packed-barcode" id="packedBarcode"></div>
+    <div class="packed-model" id="packedModel"></div>
+    <div class="packed-type" id="packedType"></div>
+    <div class="packed-photo" id="packedPhoto" style="display:none">
+      <img id="packedPhotoImg" src="" alt="Изделие" onclick="openPhotoFullscreen(this.src)">
+    </div>
+    <button class="btn btn-ok" id="btnOk" onclick="onOk()">
+      OK (<span id="timerCount">10</span>)
+      <div class="timer-bar" id="timerBar" style="width:100%"></div>
+    </button>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="onEdit()">Изменить</button>
+    </div>
+  </div>
+
+  <!-- SELECT_PACK -->
+  <div id="stateSelectPack" class="hidden">
+    <p class="select-label">Выберите тип упаковки</p>
+    <p class="select-model" id="selectModel"></p>
+    <div id="packButtons">
+      <button class="pack-btn" onclick="selectPack(this,'3см коробка S (30x28x19.5)')">3см коробка S (30x28x19.5)</button>
+      <button class="pack-btn" onclick="selectPack(this,'5см коробка M (50x28x19.5) пакет S')">5см коробка M пакет S</button>
+      <button class="pack-btn" onclick="selectPack(this,'5см коробка M (50x28x19.5) пакет L')">5см коробка M пакет L</button>
+      <button class="pack-btn" onclick="selectPack(this,'пакет S 30x20')">пакет S 30x20</button>
+      <button class="pack-btn" onclick="selectPack(this,'пакет L 60x30')">пакет L 60x30</button>
+      <button class="pack-btn" onclick="selectPack(this,'коробка мелкая старая пробная')">коробка мелкая старая пробная</button>
+    </div>
+    <button class="btn btn-primary" id="btnSavePack" onclick="onSave()" style="margin-top:16px;opacity:0.4;pointer-events:none">Сохранить</button>
+    <button class="btn btn-secondary" onclick="goIdle()">Отмена</button>
+  </div>
+
+  <!-- SAVING -->
+  <div id="stateSaving" class="hidden">
+    <div class="saving-wrap">
+      <div class="spinner"></div>
+      <div class="saving-text">Сохраняю...</div>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div id="stateSuccess" class="hidden">
+    <div class="success-wrap">
+      <div class="success-icon">🎉</div>
+      <div class="success-text">Сохранено!</div>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div id="stateError" class="hidden">
+    <div class="error-icon">❌</div>
+    <div class="error-text" id="errorText"></div>
+    <button class="btn btn-ok" id="btnErrorOk" onclick="clearErrorTimer();goIdle();">
+      Назад (<span id="errorTimerCount">5</span>)
+      <div class="timer-bar" id="errorTimerBar" style="width:100%"></div>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── Настройки ──
+var settings = {
+  packTypeFontFamily: 'Arial, sans-serif',
+  packTypeFontSize: 56,
+  packTypeColor: '#15803d',
+  packTypeBold: true,
+  photoMaxHeight: 300,
+  timerPacked: 10,
+  timerError: 5,
+};
+var SETTINGS_KEY = 'scannerSettings_v1';
+
+function loadSettings() {
+  try {
+    var saved = localStorage.getItem(SETTINGS_KEY);
+    if (saved) Object.assign(settings, JSON.parse(saved));
+  } catch(e) {}
+  applySettings();
+  syncSettingsUI();
+}
+
+function applySettings() {
+  var r = document.documentElement;
+  r.style.setProperty('--pack-font-size', settings.packTypeFontSize + 'px');
+  r.style.setProperty('--pack-font-family', settings.packTypeFontFamily);
+  r.style.setProperty('--pack-color', settings.packTypeColor);
+  r.style.setProperty('--pack-font-weight', settings.packTypeBold ? '700' : '400');
+  r.style.setProperty('--photo-max-height', settings.photoMaxHeight + 'px');
+}
+
+function syncSettingsUI() {
+  document.getElementById('setFontFamily').value = settings.packTypeFontFamily;
+  document.getElementById('setFontSize').value = settings.packTypeFontSize;
+  document.getElementById('setFontSizeVal').textContent = settings.packTypeFontSize;
+  document.getElementById('setColor').value = settings.packTypeColor;
+  document.getElementById('setBold').checked = settings.packTypeBold;
+  document.getElementById('setPhotoSize').value = settings.photoMaxHeight;
+  document.getElementById('setPhotoSizeVal').textContent = settings.photoMaxHeight;
+  document.getElementById('setTimer1').value = settings.timerPacked;
+  document.getElementById('setTimer1Val').textContent = settings.timerPacked;
+  document.getElementById('setTimer2').value = settings.timerError;
+  document.getElementById('setTimer2Val').textContent = settings.timerError;
+  updateSettingsPreview(settings);
+}
+
+function openSettings() {
+  syncSettingsUI();
+  document.getElementById('settingsOverlay').classList.add('active');
+}
+
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('active');
+  applySettings(); // откатываем незасохранённый предпросмотр
+}
+
+function previewSettings() {
+  var t = readSettingsFromUI();
+  document.getElementById('setFontSizeVal').textContent = t.packTypeFontSize;
+  document.getElementById('setPhotoSizeVal').textContent = t.photoMaxHeight;
+  document.getElementById('setTimer1Val').textContent = t.timerPacked;
+  document.getElementById('setTimer2Val').textContent = t.timerError;
+  var r = document.documentElement;
+  r.style.setProperty('--pack-font-size', t.packTypeFontSize + 'px');
+  r.style.setProperty('--pack-font-family', t.packTypeFontFamily);
+  r.style.setProperty('--pack-color', t.packTypeColor);
+  r.style.setProperty('--pack-font-weight', t.packTypeBold ? '700' : '400');
+  r.style.setProperty('--photo-max-height', t.photoMaxHeight + 'px');
+  updateSettingsPreview(t);
+}
+
+function updateSettingsPreview(t) {
+  var el = document.getElementById('settingsPreview');
+  if (!el) return;
+  el.style.fontFamily = t.packTypeFontFamily;
+  el.style.fontSize = t.packTypeFontSize + 'px';
+  el.style.color = t.packTypeColor;
+  el.style.fontWeight = t.packTypeBold ? '700' : '400';
+}
+
+function readSettingsFromUI() {
+  return {
+    packTypeFontFamily: document.getElementById('setFontFamily').value,
+    packTypeFontSize: parseInt(document.getElementById('setFontSize').value),
+    packTypeColor: document.getElementById('setColor').value,
+    packTypeBold: document.getElementById('setBold').checked,
+    photoMaxHeight: parseInt(document.getElementById('setPhotoSize').value),
+    timerPacked: parseInt(document.getElementById('setTimer1').value),
+    timerError: parseInt(document.getElementById('setTimer2').value),
+  };
+}
+
+function saveSettings() {
+  settings = readSettingsFromUI();
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
+  applySettings();
+  document.getElementById('settingsOverlay').classList.remove('active');
+}
+
+function settingsOverlayBgClick(e) {
+  if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+}
+
+// ── Apps Script URL — бэкенд ──
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwg4XoEi9Gmxv-SY2K_KglrSh64agoFitr6pwCIM9MxubDaq50URogmfDpEkuZc7NBUag/exec';
+
+let currentModel = '';
+let timerInterval = null;
+let timerSeconds = 10;
+
+// ── Предзагруженные данные ──
+let barcodeToModel = {};   // штрих-код → { model, repacked, packType }
+let dataLoaded = false;
+let dataLoadError = null;
+
+// ── API-обёртка через JSONP (обход CORS) ──
+let _apiCallId = 0;
+function apiCall(action, params) {
+  return new Promise(function(resolve) {
+    const id = '_apiCb' + (++_apiCallId);
+    const url = new URL(APPS_SCRIPT_URL);
+    url.searchParams.set('action', action);
+    url.searchParams.set('callback', id);
+    if (params) {
+      Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+    }
+    window[id] = function(result) {
+      resolve(result);
+      delete window[id];
+      script.remove();
+    };
+    const script = document.createElement('script');
+    script.src = url.toString();
+    script.onerror = function() {
+      resolve({ error: 'Network error' });
+      delete window[id];
+      script.remove();
+    };
+    document.head.appendChild(script);
+  });
+}
+
+const states = ['stateIdle', 'stateAlreadyPacked', 'stateSelectPack', 'stateSaving', 'stateSuccess', 'stateError'];
+
+function showState(name) {
+  states.forEach(s => document.getElementById(s).classList.add('hidden'));
+  document.getElementById(name).classList.remove('hidden');
+}
+
+function goIdle() {
+  clearErrorTimer();
+  clearTimer();
+  closePhotoFullscreen();
+  closeCamera();
+  var t = document.getElementById('pageTitle');
+  if (t) t.style.display = '';
+  currentModel = '';
+  document.getElementById('barcodeInput').value = '';
+  document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
+  // Сброс кнопок
+  document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+  var saveBtn = document.getElementById('btnSavePack');
+  if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
+  // Скрываем информацию о сканировании
+  document.getElementById('scanInfo').classList.add('hidden');
+  showState('stateIdle');
+  setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
+}
+
+// Автоматически ищем при нажатии Enter в поле
+document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') onSearch();
+});
+
+/**
+ * Предзагрузка всех данных при старте.
+ * Загружаем все штрих-коды, модели и статусы упаковки в память.
+ * После этого поиск работает локально — мгновенно!
+ */
+function preloadAllData() {
+  showPreloader(true);
+  apiCall('getAllBarcodes')
+    .then(function(result) {
+      showPreloader(false);
+      if (result.error) {
+        dataLoadError = result.error;
+        showError('Ошибка загрузки: ' + result.error);
+      } else {
+        barcodeToModel = result.barcodes || {};
+        dataLoaded = true;
+        document.getElementById('barcodeInput').focus();
+      }
+    });
+}
+
+function showPreloader(show) {
+  const el = document.getElementById('preloader');
+  if (!el) return;
+  if (show) {
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function onSearch() {
+  const query = document.getElementById('barcodeInput').value.trim();
+  if (!query) return;
+
+  // Если данные ещё не загрузились — ждём
+  if (!dataLoaded && !dataLoadError) {
+    showState('stateSaving');
+    setTimeout(function() { onSearch(); }, 300);
+    return;
+  }
+
+  // Сначала ищем по штрих-коду, затем по номеру модели
+  let item = barcodeToModel[query];
+  let foundBarcode = query;
+
+  if (!item) {
+    const queryLower = query.toLowerCase();
+    const matchedKey = Object.keys(barcodeToModel).find(function(bc) {
+      return barcodeToModel[bc].model.toLowerCase() === queryLower;
+    });
+    if (matchedKey) {
+      item = barcodeToModel[matchedKey];
+      foundBarcode = matchedKey;
+    }
+  }
+
+  if (!item) {
+    document.getElementById('pageTitle').style.display = 'none';
+    showError('Штрих-код или модель не найдены');
+    startErrorTimer();
+    return;
+  }
+
+  // Показываем штрих-код, модель и фото
+  document.getElementById('scanBarcode').textContent = 'Штрих-код: ' + foundBarcode;
+  document.getElementById('scanModel').textContent = 'Модель: ' + item.model;
+  // Фото или "фото не найдено"
+  const photoEl = document.getElementById('scanPhoto');
+  if (item.photoUrl) {
+    const img = document.createElement('img');
+    img.src = item.photoUrl;
+    img.alt = 'Изделие';
+    img.id = 'scanPhotoImg';
+    img.onclick = function() { openPhotoFullscreen(this.src); };
+    photoEl.innerHTML = '';
+    photoEl.appendChild(img);;
+  } else {
+    photoEl.innerHTML = '<div class="no-photo">Фото не найдено</div>';
+  }
+  document.getElementById('scanInfo').classList.remove('hidden');
+
+  currentModel = item.model;
+
+  if (item.repacked) {
+    document.getElementById('scanInfo').classList.add('hidden');
+    document.getElementById('pageTitle').style.display = 'none';
+    document.getElementById('packedBarcode').textContent = foundBarcode;
+    document.getElementById('packedModel').textContent = item.model;
+    document.getElementById('packedType').textContent = item.packType || '(тип не указан)';
+    const pPhoto = document.getElementById('packedPhoto');
+    const pImg = document.getElementById('packedPhotoImg');
+    if (item.photoUrl) {
+      pImg.src = item.photoUrl;
+      pPhoto.style.display = 'block';
+    } else {
+      pPhoto.style.display = 'none';
+    }
+    showState('stateAlreadyPacked');
+    startTimer();
+  } else {
+    // Не упаковлено — выбор упаковки
+    document.getElementById('pageTitle').style.display = 'none';
+    document.getElementById('scanInfo').classList.remove('hidden');
+    document.getElementById('selectModel').textContent = item.model;
+    document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
+  // Сброс кнопок
+  document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+  var saveBtn = document.getElementById('btnSavePack');
+  if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
+  showState('stateSelectPack');
+  }
+}
+
+// ── Таймер для экрана ошибки ──
+let errorTimerInterval = null;
+let errorTimerSeconds = 5;
+
+function startErrorTimer() {
+  clearErrorTimer();
+  errorTimerSeconds = settings.timerError;
+  updateErrorTimerDisplay();
+  document.getElementById('errorTimerBar').style.width = '100%';
+  setTimeout(function() {
+    document.getElementById('errorTimerBar').style.width = '0%';
+    document.getElementById('errorTimerBar').style.transitionDuration = settings.timerError + 's';
+  }, 50);
+  errorTimerInterval = setInterval(function() {
+    errorTimerSeconds--;
+    updateErrorTimerDisplay();
+    if (errorTimerSeconds <= 0) {
+      clearErrorTimer();
+      closePhotoFullscreen();
+      goIdle();
+    }
+  }, 1000);
+}
+
+function updateErrorTimerDisplay() {
+  var el = document.getElementById('errorTimerCount');
+  if (el) el.textContent = errorTimerSeconds;
+}
+
+function clearErrorTimer() {
+  if (errorTimerInterval) {
+    clearInterval(errorTimerInterval);
+    errorTimerInterval = null;
+  }
+}
+
+function startTimer() {
+  clearTimer();
+  timerSeconds = settings.timerPacked;
+  updateTimerDisplay();
+  document.getElementById('timerBar').style.width = '100%';
+
+  setTimeout(function() {
+    document.getElementById('timerBar').style.width = '0%';
+    document.getElementById('timerBar').style.transitionDuration = settings.timerPacked + 's';
+  }, 50);
+
+  timerInterval = setInterval(function() {
+    timerSeconds--;
+    updateTimerDisplay();
+    if (timerSeconds <= 0) {
+      clearTimer();
+      closePhotoFullscreen();
+      goIdle();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  document.getElementById('timerCount').textContent = timerSeconds;
+}
+
+function clearTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function onOk() {
+  clearTimer();
+  goIdle();
+}
+
+function onEdit() {
+  clearTimer();
+  document.getElementById('selectModel').textContent = currentModel;
+  document.getElementById('packSelect') && (document.getElementById('packSelect').value = '');
+  // Сброс кнопок
+  document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+  var saveBtn = document.getElementById('btnSavePack');
+  if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
+  // Скрываем информацию о сканировании
+  document.getElementById('scanInfo').classList.add('hidden');
+  showState('stateSelectPack');
+}
+
+var selectedPackType = '';
+
+function selectPack(el, value) {
+  document.querySelectorAll('.pack-btn').forEach(function(b) {
+    b.classList.remove('selected');
+  });
+  el.classList.add('selected');
+  selectedPackType = value;
+  var saveBtn = document.getElementById('btnSavePack');
+  if (saveBtn) {
+    saveBtn.style.opacity = '1';
+    saveBtn.style.pointerEvents = 'auto';
+  }
+}
+
+function onSave() {
+  const packType = selectedPackType;
+  if (!packType) {
+    alert('Выберите тип упаковки');
+    return;
+  }
+  if (!currentModel) {
+    showError('Модель не определена, начните заново');
+    return;
+  }
+
+  showState('stateSaving');
+
+  apiCall('savePackaging', { model: currentModel, packType: packType })
+    .then(function(result) {
+      if (!result.success) {
+        showError(result.error || 'Ошибка сохранения');
+        return;
+      }
+      // Обновляем предзагруженные данные — галочка + тип упаковки
+      Object.keys(barcodeToModel).forEach(function(bc) {
+        if (barcodeToModel[bc].model === currentModel) {
+          barcodeToModel[bc].repacked = true;
+          barcodeToModel[bc].packType = packType;
+        }
+      });
+      showState('stateSuccess');
+      setTimeout(goIdle, 1200);
+    });
+}
+
+function showError(msg) {
+  document.getElementById('errorText').textContent = msg;
+  showState('stateError');
+}
+
+// ── Таблица всех изделий ──
+var tableActiveType = '';
+var tableChangedModels = new Set();
+var TABLE_PACK_TYPES = ['3см коробка S (30x28x19.5)','5см коробка M (50x28x19.5) пакет S','5см коробка M (50x28x19.5) пакет L','пакет S 30x20','пакет L 60x30','коробка мелкая старая пробная'];
+
+function openTableView() {
+  document.getElementById('tableView').classList.add('active');
+  document.getElementById('tableView').scrollTop = 0;
+  document.getElementById('tblSearch').value = '';
+  document.getElementById('tblBody').innerHTML = '';
+  document.getElementById('tblEmpty').style.display = 'none';
+  document.getElementById('tblLoading').style.display = '';
+  buildTypeTabs();
+  // Откладываем рендер чтобы не блокировать CSS-анимацию открытия
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      renderTableView();
+      document.getElementById('tblLoading').style.display = 'none';
+      var h = document.querySelector('.tbl-topbar').offsetHeight;
+      document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
+    });
+  });
+}
+
+function closeTableView() {
+  if (tableChangedModels.size > 0) {
+    if (!confirm('Есть несохранённые изменения. Закрыть без сохранения?')) return;
+    tableChangedModels.clear();
+  }
+  document.getElementById('tableView').classList.remove('active');
+}
+
+function buildTypeTabs() {
+  var types = new Set();
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (item.type) types.add(item.type);
+  });
+  types = Array.from(types).sort();
+
+  var wrap = document.getElementById('tblTabsWrap');
+  if (!types.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  wrap.innerHTML = [''].concat(types).map(function(t) {
+    var active = tableActiveType === t ? ' active' : '';
+    var label = t || 'Все';
+    return '<button class="tbl-tab' + active + '" data-type="' + esc(t) + '">' + esc(label) + '</button>';
+  }).join('');
+
+  wrap.querySelectorAll('.tbl-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tableActiveType = this.dataset.type;
+      wrap.querySelectorAll('.tbl-tab').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      renderTableView();
+    });
+  });
+}
+
+// Разбирает «1-11711/1» → { type:1, model:11711, design:1 }
+function parseModelNum(m) {
+  m = (m || '').toString();
+  var dash = m.indexOf('-');
+  if (dash === -1) return { type: 999999, model: 999999, design: 0 };
+  var slash = m.indexOf('/', dash);
+  var type   = parseInt(m.slice(0, dash))                          || 0;
+  var model  = parseInt(slash > dash ? m.slice(dash+1, slash) : m.slice(dash+1)) || 0;
+  var design = parseInt(slash > dash ? m.slice(slash+1) : '0')    || 0;
+  return { type: type, model: model, design: design };
+}
+
+function getTableModels() {
+  var search = (document.getElementById('tblSearch').value || '').toLowerCase().trim();
+  var seen = {};
+  var models = [];
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (seen[item.model]) return;
+    seen[item.model] = true;
+    if (tableActiveType && item.type !== tableActiveType) return;
+    if (search && item.model.toLowerCase().indexOf(search) === -1) return;
+    models.push(item);
+  });
+  models.sort(function(a, b) {
+    if (a.repacked !== b.repacked) return a.repacked ? -1 : 1; // упакованные первыми
+    var pa = parseModelNum(a.model), pb = parseModelNum(b.model);
+    if (pa.type !== pb.type) return pa.type - pb.type;
+    if (pa.model !== pb.model) return pa.model - pb.model;
+    return pa.design - pb.design;
+  });
+  return models;
+}
+
+function renderTableView() {
+  var models = getTableModels();
+  var tbody = document.getElementById('tblBody');
+  var empty = document.getElementById('tblEmpty');
+
+  if (!models.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = models.map(function(item) {
+    var isChanged = tableChangedModels.has(item.model);
+    var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+    var photoHtml = item.photoUrl
+      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
+      : '';
+    var packOpts = '<option value="">—</option>' + TABLE_PACK_TYPES.map(function(pt) {
+      return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
+    }).join('');
+    var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+    return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
+      + '<td class="tbl-model">' + esc(item.model) + '</td>'
+      + '<td class="tbl-col-photo">' + photoHtml + '</td>'
+      + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
+      + '<td><select class="tbl-pack-sel">' + packOpts + '</select></td>'
+      + '<td>' + saveBtn + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+// Делегирование событий таблицы — регистрируется после загрузки DOM
+function initTableEvents() {
+  document.getElementById('tblBody').addEventListener('change', function(e) {
+    var tr = e.target.closest('tr[data-model]');
+    if (!tr) return;
+    var model = tr.dataset.model;
+    if (e.target.type === 'checkbox') {
+      tblSetRepacked(model, e.target.checked, tr);
+    } else if (e.target.classList.contains('tbl-pack-sel')) {
+      tblSetPackType(model, e.target.value, tr);
+    }
+  });
+  document.getElementById('tblBody').addEventListener('click', function(e) {
+    if (!e.target.classList.contains('tbl-save-btn')) return;
+    var tr = e.target.closest('tr[data-model]');
+    if (tr) saveTableItem(tr.dataset.model, e.target);
+  });
+}
+
+function tblSetRepacked(model, checked, tr) {
+  Object.keys(barcodeToModel).forEach(function(bc) {
+    if (barcodeToModel[bc].model === model) barcodeToModel[bc].repacked = checked;
+  });
+  tableChangedModels.add(model);
+  tblRefreshRow(tr, model);
+  tblUpdateStats();
+}
+
+function tblSetPackType(model, packType, tr) {
+  Object.keys(barcodeToModel).forEach(function(bc) {
+    if (barcodeToModel[bc].model === model) barcodeToModel[bc].packType = packType;
+  });
+  tableChangedModels.add(model);
+  tblRefreshRow(tr, model);
+}
+
+function tblRefreshRow(tr, model) {
+  var item = Object.values(barcodeToModel).find(function(i) { return i.model === model; });
+  if (!item) return;
+  var isChanged = tableChangedModels.has(model);
+  tr.className = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+  var lastTd = tr.lastElementChild;
+  lastTd.innerHTML = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+}
+
+function tblUpdateStats() {
+  // счётчики убраны
+}
+
+function saveTableItem(model, btn) {
+  var item = Object.values(barcodeToModel).find(function(i) { return i.model === model; });
+  if (!item) return;
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  apiCall('saveItem', { model: model, repacked: item.repacked ? 'true' : 'false', packType: item.packType || '' })
+    .then(function(result) {
+      if (result && result.success) {
+        tableChangedModels.delete(model);
+        var tr = document.querySelector('#tblBody tr[data-model="' + esc(model) + '"]');
+        if (tr) tblRefreshRow(tr, model);
+      } else {
+        if (btn) { btn.textContent = 'Записать'; btn.disabled = false; }
+        alert('Ошибка: ' + ((result && result.error) || 'неизвестно'));
+      }
+    });
+}
+
+function esc(str) {
+  return (str || '').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Камера ──
+var codeReader = null;
+var zxingLoaded = false;
+
+function loadZXing() {
+  return new Promise(function(resolve, reject) {
+    if (zxingLoaded) { resolve(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+    s.onload = function() { zxingLoaded = true; resolve(); };
+    s.onerror = function() { reject(new Error('Не удалось загрузить библиотеку сканирования')); };
+    document.head.appendChild(s);
+  });
+}
+
+function openCamera() {
+  document.getElementById('cameraOverlay').classList.add('active');
+  loadZXing()
+    .then(function() {
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.ITF,
+      ]);
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      return codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
+        document.getElementById('cameraVideo'),
+        function(result, err) {
+          if (result) {
+            closeCamera();
+            document.getElementById('barcodeInput').value = result.getText();
+            onSearch();
+          }
+        }
+      );
+    })
+    .catch(function(e) {
+      closeCamera();
+      showError('Камера недоступна: ' + (e.message || e));
+      startErrorTimer();
+    });
+}
+
+function closeCamera() {
+  document.getElementById('cameraOverlay').classList.remove('active');
+  if (codeReader) {
+    try { codeReader.reset(); } catch(e) {}
+    codeReader = null;
+  }
+}
+
+// ── Scanbot ──
+var scanbotSDKInstance = null;
+var scanbotScanner = null;
+
+function loadScanbotSDK() {
+  return new Promise(function(resolve, reject) {
+    if (window.ScanbotSDK) { resolve(); return; }
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@latest/bundle/ScanbotSDK.min.js';
+    script.onload = resolve;
+    script.onerror = function() { reject(new Error('Не удалось загрузить Scanbot SDK')); };
+    document.head.appendChild(script);
+  });
+}
+
+function openScanbot() {
+  document.getElementById('scanbotOverlay').classList.add('active');
+  loadScanbotSDK()
+    .then(function() {
+      return ScanbotSDK.initialize({
+        licenseKey: '',
+        enginePath: 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@latest/bundle/'
+      });
+    })
+    .then(function(sdk) {
+      scanbotSDKInstance = sdk;
+      return sdk.createBarcodeScanner({
+        containerId: 'scanbotContainer',
+        onBarcodesDetected: function(result) {
+          if (result.barcodes && result.barcodes.length > 0) {
+            closeScanbot();
+            document.getElementById('barcodeInput').value = result.barcodes[0].text;
+            onSearch();
+          }
+        }
+      });
+    })
+    .then(function(scanner) {
+      scanbotScanner = scanner;
+    })
+    .catch(function(e) {
+      closeScanbot();
+      showError('Scanbot недоступен: ' + (e.message || e));
+      startErrorTimer();
+    });
+}
+
+function closeScanbot() {
+  document.getElementById('scanbotOverlay').classList.remove('active');
+  if (scanbotScanner) {
+    try { scanbotScanner.dispose(); } catch(e) {}
+    scanbotScanner = null;
+  }
+}
+
+// ── Полноэкранное фото ──
+function openPhotoFullscreen(src) {
+  var overlay = document.getElementById('photoOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'photoOverlay';
+    overlay.className = 'photo-overlay';
+    overlay.onclick = closePhotoFullscreen;
+    var img = document.createElement('img');
+    img.id = 'photoOverlayImg';
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('photoOverlayImg').src = src;
+  overlay.classList.add('active');
+}
+function closePhotoFullscreen() {
+  var overlay = document.getElementById('photoOverlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+// При загрузке: настройки + данные + SW
+window.onload = function() {
+  initTableEvents();
+  loadSettings();
+  preloadAllData();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function() {});
+  }
+};
+</script>
+
+<!-- Полноэкранное фото -->
+<div class="photo-overlay" id="photoOverlay" onclick="closePhotoFullscreen()">
+  <img id="photoOverlayImg" src="" alt="Фото">
+</div>
+
+<!-- Настройки -->
+<div id="settingsOverlay" class="settings-overlay" onclick="settingsOverlayBgClick(event)">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <span class="settings-title">⚙️ Настройки</span>
+      <button class="settings-close-btn" onclick="closeSettings()">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Шрифт типа упаковки</div>
+      <select id="setFontFamily" class="settings-select" onchange="previewSettings()">
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="Georgia, serif">Georgia</option>
+        <option value="'Courier New', monospace">Courier New</option>
+        <option value="Impact, sans-serif">Impact</option>
+        <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Размер шрифта: <b id="setFontSizeVal">56</b> px</div>
+      <input type="range" id="setFontSize" class="settings-range" min="20" max="120" value="56" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Цвет текста</div>
+      <input type="color" id="setColor" class="settings-color" value="#15803d" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setBold" checked onchange="previewSettings()">
+        Жирный шрифт
+      </label>
+    </div>
+
+    <div class="settings-preview-box">
+      <div class="settings-preview-label">Предпросмотр</div>
+      <div id="settingsPreview" style="line-height:1.2">3см коробка S (30x28x19.5)</div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Размер картинки: <b id="setPhotoSizeVal">300</b> px</div>
+      <input type="range" id="setPhotoSize" class="settings-range" min="80" max="500" value="300" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Таймер «Уже упаковано»: <b id="setTimer1Val">10</b> сек</div>
+      <input type="range" id="setTimer1" class="settings-range" min="3" max="60" value="10" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Таймер ошибки: <b id="setTimer2Val">5</b> сек</div>
+      <input type="range" id="setTimer2" class="settings-range" min="2" max="30" value="5" oninput="previewSettings()">
+    </div>
+
+    <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+    <button class="btn btn-secondary" onclick="closeSettings()" style="margin-top:10px">Отмена</button>
+  </div>
+</div>
+
+<!-- Таблица всех изделий -->
+<div id="tableView" class="table-overlay">
+  <div class="tbl-topbar">
+    <button class="tbl-back-btn" onclick="closeTableView()">← Сканер</button>
+    <span class="tbl-title">Все изделия</span>
+  </div>
+  <div class="tbl-tabs-wrap" id="tblTabsWrap"></div>
+  <div class="tbl-search-wrap">
+    <input type="text" id="tblSearch" placeholder="🔍 Поиск по номеру модели..." oninput="renderTableView()">
+  </div>
+  <div class="tbl-scroll">
+    <table class="tbl-table">
+      <thead>
+        <tr>
+          <th>Модель</th>
+          <th class="tbl-col-photo">Фото</th>
+          <th class="tbl-center">Упак.</th>
+          <th>Коробка / пакет</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tblBody"></tbody>
+  </table>
+  <div id="tblLoading" class="tbl-loading"><div class="tbl-spinner"></div></div>
+    </table>
+    <div id="tblEmpty" class="tbl-empty" style="display:none">Нет данных</div>
+  </div>
+</div>
+
+<!-- Scanbot -->
+<div id="scanbotOverlay">
+  <div id="scanbotContainer"></div>
+  <button class="camera-close-btn" onclick="closeScanbot()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:100000">✕</button>
+</div>
+
+<!-- Камера -->
+<div id="cameraOverlay" class="camera-overlay">
+  <video id="cameraVideo" autoplay muted playsinline></video>
+  <div class="scan-zone">
+    <div class="scan-line"></div>
+  </div>
+  <button class="camera-close-btn" onclick="closeCamera()">✕</button>
+  <div class="camera-hint">Наведите штрих-код в рамку</div>
+</div>
+
+</body>
+</html>
