@@ -9,12 +9,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v112</title>
+  <title>Сканер упаковки v113</title>
   <style>
     :root {
       --pack-font-size: 56px;
       --pack-font-family: Arial, sans-serif;
       --pack-color: #15803d;
+      --pack-font-weight: 700;
       --photo-max-height: 300px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -132,7 +133,7 @@
     .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
     .packed-barcode { font-size: 20px; color: #111827; text-align: center; font-weight: 700; margin-bottom: 4px; font-family: monospace; }
     .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 2px; font-family: monospace; }
-    .packed-type { font-size: var(--pack-font-size); font-family: var(--pack-font-family); color: var(--pack-color); text-align: center; font-weight: 700; margin-bottom: 8px; line-height: 1.2; }
+    .packed-type { font-size: var(--pack-font-size); font-family: var(--pack-font-family); color: var(--pack-color); font-weight: var(--pack-font-weight); text-align: center; margin-bottom: 8px; line-height: 1.2; }
 
     .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
     .btn-ok:active { background: #166534; }
@@ -285,6 +286,20 @@
       border: 2px solid #d1d5db; border-radius: 10px;
       cursor: pointer; padding: 4px; background: white;
     }
+    .settings-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: clamp(14px, 4vw, 17px);
+      color: #374151;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-checkbox-label input[type=checkbox] {
+      width: 22px; height: 22px;
+      accent-color: #15803d;
+      cursor: pointer;
+    }
     .settings-preview-box {
       background: #f8fafc; border-radius: 12px;
       padding: 12px 16px; text-align: center; margin-bottom: 16px;
@@ -363,7 +378,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v112</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v113</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -460,6 +475,7 @@ var settings = {
   packTypeFontFamily: 'Arial, sans-serif',
   packTypeFontSize: 56,
   packTypeColor: '#15803d',
+  packTypeBold: true,
   photoMaxHeight: 300,
   timerPacked: 10,
   timerError: 5,
@@ -480,6 +496,7 @@ function applySettings() {
   r.style.setProperty('--pack-font-size', settings.packTypeFontSize + 'px');
   r.style.setProperty('--pack-font-family', settings.packTypeFontFamily);
   r.style.setProperty('--pack-color', settings.packTypeColor);
+  r.style.setProperty('--pack-font-weight', settings.packTypeBold ? '700' : '400');
   r.style.setProperty('--photo-max-height', settings.photoMaxHeight + 'px');
 }
 
@@ -488,6 +505,7 @@ function syncSettingsUI() {
   document.getElementById('setFontSize').value = settings.packTypeFontSize;
   document.getElementById('setFontSizeVal').textContent = settings.packTypeFontSize;
   document.getElementById('setColor').value = settings.packTypeColor;
+  document.getElementById('setBold').checked = settings.packTypeBold;
   document.getElementById('setPhotoSize').value = settings.photoMaxHeight;
   document.getElementById('setPhotoSizeVal').textContent = settings.photoMaxHeight;
   document.getElementById('setTimer1').value = settings.timerPacked;
@@ -517,6 +535,7 @@ function previewSettings() {
   r.style.setProperty('--pack-font-size', t.packTypeFontSize + 'px');
   r.style.setProperty('--pack-font-family', t.packTypeFontFamily);
   r.style.setProperty('--pack-color', t.packTypeColor);
+  r.style.setProperty('--pack-font-weight', t.packTypeBold ? '700' : '400');
   r.style.setProperty('--photo-max-height', t.photoMaxHeight + 'px');
   updateSettingsPreview(t);
 }
@@ -527,6 +546,7 @@ function updateSettingsPreview(t) {
   el.style.fontFamily = t.packTypeFontFamily;
   el.style.fontSize = t.packTypeFontSize + 'px';
   el.style.color = t.packTypeColor;
+  el.style.fontWeight = t.packTypeBold ? '700' : '400';
 }
 
 function readSettingsFromUI() {
@@ -534,6 +554,7 @@ function readSettingsFromUI() {
     packTypeFontFamily: document.getElementById('setFontFamily').value,
     packTypeFontSize: parseInt(document.getElementById('setFontSize').value),
     packTypeColor: document.getElementById('setColor').value,
+    packTypeBold: document.getElementById('setBold').checked,
     photoMaxHeight: parseInt(document.getElementById('setPhotoSize').value),
     timerPacked: parseInt(document.getElementById('setTimer1').value),
     timerError: parseInt(document.getElementById('setTimer2').value),
@@ -981,9 +1002,16 @@ window.onload = function() {
       <input type="color" id="setColor" class="settings-color" value="#15803d" oninput="previewSettings()">
     </div>
 
+    <div class="settings-group">
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setBold" checked onchange="previewSettings()">
+        Жирный шрифт
+      </label>
+    </div>
+
     <div class="settings-preview-box">
       <div class="settings-preview-label">Предпросмотр</div>
-      <div id="settingsPreview" style="font-weight:700;line-height:1.2">коробка S 28x19.5x30</div>
+      <div id="settingsPreview" style="line-height:1.2">коробка S 28x19.5x30</div>
     </div>
 
     <div class="settings-group">
