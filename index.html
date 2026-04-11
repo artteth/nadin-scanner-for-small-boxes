@@ -1274,59 +1274,71 @@ function closeCamera() {
   }
 }
 
-// ── Scanbot ──
-var scanbotSDKInstance = null;
-var scanbotScanner = null;
-
-function loadScanbotSDK() {
-  return new Promise(function(resolve, reject) {
-    if (window.ScanbotSDK) { resolve(); return; }
-    var script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@latest/bundle/ScanbotSDK.min.js';
-    script.onload = resolve;
-    script.onerror = function() { reject(new Error('Не удалось загрузить Scanbot SDK')); };
-    document.head.appendChild(script);
-  });
-}
+// ── Scanbot (BarcodeDetector API) ──
+var scanbotStream = null;
+var scanbotAnimFrame = null;
+var scanbotDetector = null;
 
 function openScanbot() {
+  if (!('BarcodeDetector' in window)) {
+    showError('BarcodeDetector не поддерживается. Используйте Chrome на Android.');
+    startErrorTimer();
+    return;
+  }
   document.getElementById('scanbotOverlay').classList.add('active');
-  loadScanbotSDK()
-    .then(function() {
-      return ScanbotSDK.initialize({
-        licenseKey: '',
-        enginePath: 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@latest/bundle/'
-      });
-    })
-    .then(function(sdk) {
-      scanbotSDKInstance = sdk;
-      return sdk.createBarcodeScanner({
-        containerId: 'scanbotContainer',
-        onBarcodesDetected: function(result) {
-          if (result.barcodes && result.barcodes.length > 0) {
-            closeScanbot();
-            document.getElementById('barcodeInput').value = result.barcodes[0].text;
-            onSearch();
-          }
-        }
-      });
-    })
-    .then(function(scanner) {
-      scanbotScanner = scanner;
-    })
-    .catch(function(e) {
-      closeScanbot();
-      showError('Scanbot недоступен: ' + (e.message || e));
-      startErrorTimer();
+  var video = document.getElementById('scanbotVideo');
+  var canvas = document.getElementById('scanbotCanvas');
+  var ctx = canvas.getContext('2d');
+
+  if (!scanbotDetector) {
+    scanbotDetector = new BarcodeDetector({
+      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'qr_code', 'data_matrix']
     });
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+  }).then(function(stream) {
+    scanbotStream = stream;
+    video.srcObject = stream;
+    video.play();
+    video.onloadedmetadata = function() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      scanFrame();
+    };
+  }).catch(function(e) {
+    closeScanbot();
+    showError('Камера недоступна: ' + (e.message || e));
+    startErrorTimer();
+  });
+
+  function scanFrame() {
+    if (!scanbotStream) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    scanbotDetector.detect(canvas).then(function(barcodes) {
+      if (barcodes && barcodes.length > 0) {
+        closeScanbot();
+        document.getElementById('barcodeInput').value = barcodes[0].rawValue;
+        onSearch();
+        return;
+      }
+      scanbotAnimFrame = requestAnimationFrame(scanFrame);
+    }).catch(function() {
+      scanbotAnimFrame = requestAnimationFrame(scanFrame);
+    });
+  }
 }
 
 function closeScanbot() {
   document.getElementById('scanbotOverlay').classList.remove('active');
-  if (scanbotScanner) {
-    try { scanbotScanner.dispose(); } catch(e) {}
-    scanbotScanner = null;
+  if (scanbotAnimFrame) { cancelAnimationFrame(scanbotAnimFrame); scanbotAnimFrame = null; }
+  if (scanbotStream) {
+    scanbotStream.getTracks().forEach(function(t) { t.stop(); });
+    scanbotStream = null;
   }
+  var video = document.getElementById('scanbotVideo');
+  if (video) { video.srcObject = null; }
 }
 
 // ── Полноэкранное фото ──
@@ -1458,8 +1470,13 @@ window.onload = function() {
 
 <!-- Scanbot -->
 <div id="scanbotOverlay">
-  <div id="scanbotContainer"></div>
+  <video id="scanbotVideo" autoplay muted playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover"></video>
+  <canvas id="scanbotCanvas" style="display:none"></canvas>
+  <div class="scan-zone" style="position:relative;z-index:1">
+    <div class="scan-line"></div>
+  </div>
   <button class="camera-close-btn" onclick="closeScanbot()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:100000">✕</button>
+  <div class="camera-hint">Наведите штрих-код в рамку</div>
 </div>
 
 <!-- Камера -->
