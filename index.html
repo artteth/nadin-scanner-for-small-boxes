@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v116</title>
+  <title>Сканер упаковки v117</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -340,16 +340,13 @@
     .tbl-stats { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.75); white-space: nowrap; flex-shrink: 0; }
     .tbl-tabs-wrap {
       display: flex;
-      overflow-x: auto;
+      flex-wrap: wrap;
       gap: 8px;
       padding: 10px 12px;
       background: white;
       border-bottom: 1px solid #e5e7eb;
       flex-shrink: 0;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
     }
-    .tbl-tabs-wrap::-webkit-scrollbar { display: none; }
     .tbl-tab {
       height: 34px; padding: 0 14px;
       border-radius: 17px;
@@ -357,7 +354,7 @@
       background: white;
       font-size: clamp(12px, 3.5vw, 14px); font-weight: 600;
       color: #374151; cursor: pointer;
-      white-space: nowrap; flex-shrink: 0;
+      white-space: nowrap;
       transition: all 0.15s;
     }
     .tbl-tab.active { background: #15803d; color: white; border-color: #15803d; }
@@ -374,17 +371,6 @@
       color: #111827; background: #f9fafb; outline: none;
     }
     .tbl-search-wrap input:focus { border-color: #15803d; }
-    .tbl-stats-bar {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 8px; padding: 8px 12px;
-      background: white;
-      border-bottom: 1px solid #e5e7eb;
-      flex-shrink: 0;
-    }
-    .tbl-stat { background: #f8fafc; border-radius: 8px; padding: 8px 12px; }
-    .tbl-stat-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.04em; }
-    .tbl-stat-val { font-size: 20px; font-weight: 700; color: #111827; }
-    .tbl-stat-val.green { color: #15803d; }
     .tbl-scroll {
       flex: 1;
       overflow-y: auto;
@@ -500,7 +486,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v116</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v117</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1078,7 +1064,7 @@ function getTableModels() {
     models.push(item);
   });
   models.sort(function(a, b) {
-    if (a.repacked !== b.repacked) return a.repacked ? 1 : -1;
+    if (a.repacked !== b.repacked) return a.repacked ? -1 : 1; // упакованные первыми
     return (a.model || '').localeCompare(b.model || '');
   });
   return models;
@@ -1088,17 +1074,6 @@ function renderTableView() {
   var models = getTableModels();
   var tbody = document.getElementById('tblBody');
   var empty = document.getElementById('tblEmpty');
-
-  // Считаем статистику по всем изделиям (без фильтра)
-  var allSeen = {}, total = 0, packed = 0;
-  Object.values(barcodeToModel).forEach(function(item) {
-    if (allSeen[item.model]) return;
-    allSeen[item.model] = true;
-    total++; if (item.repacked) packed++;
-  });
-  document.getElementById('tblTotal').textContent = total;
-  document.getElementById('tblPacked').textContent = packed;
-  document.getElementById('tblHeaderStats').textContent = packed + '\u00a0/\u00a0' + total;
 
   if (!models.length) {
     tbody.innerHTML = '';
@@ -1173,15 +1148,7 @@ function tblRefreshRow(tr, model) {
 }
 
 function tblUpdateStats() {
-  var seen = {}, total = 0, packed = 0;
-  Object.values(barcodeToModel).forEach(function(item) {
-    if (seen[item.model]) return;
-    seen[item.model] = true;
-    total++; if (item.repacked) packed++;
-  });
-  document.getElementById('tblTotal').textContent = total;
-  document.getElementById('tblPacked').textContent = packed;
-  document.getElementById('tblHeaderStats').textContent = packed + '\u00a0/\u00a0' + total;
+  // счётчики убраны
 }
 
 function saveTableItem(model, btn) {
@@ -1365,13 +1332,8 @@ window.onload = function() {
   <div class="tbl-topbar">
     <button class="tbl-back-btn" onclick="closeTableView()">← Сканер</button>
     <span class="tbl-title">Все изделия</span>
-    <span class="tbl-stats" id="tblHeaderStats"></span>
   </div>
   <div class="tbl-tabs-wrap" id="tblTabsWrap"></div>
-  <div class="tbl-stats-bar">
-    <div class="tbl-stat"><div class="tbl-stat-label">Всего</div><div class="tbl-stat-val" id="tblTotal">0</div></div>
-    <div class="tbl-stat"><div class="tbl-stat-label">Упаковано</div><div class="tbl-stat-val green" id="tblPacked">0</div></div>
-  </div>
   <div class="tbl-search-wrap">
     <input type="text" id="tblSearch" placeholder="🔍 Поиск по номеру модели..." oninput="renderTableView()">
   </div>
