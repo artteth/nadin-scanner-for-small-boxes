@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v110</title>
+  <title>Сканер упаковки v111</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html {
@@ -212,6 +212,70 @@
       object-fit: contain;
     }
 
+    /* ── КАМЕРА ── */
+    .camera-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99998;
+      background: black;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .camera-overlay.active { display: flex; }
+    #cameraVideo {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .scan-zone {
+      position: relative;
+      z-index: 1;
+      width: min(80vw, 360px);
+      height: min(28vw, 120px);
+      border: 3px solid #15803d;
+      border-radius: 14px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+      overflow: hidden;
+    }
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #15803d, transparent);
+      animation: scanMove 2s ease-in-out infinite;
+      top: 10%;
+    }
+    @keyframes scanMove {
+      0%, 100% { top: 10%; }
+      50% { top: 85%; }
+    }
+    .camera-close-btn {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: 16px;
+      z-index: 2;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.4);
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .camera-hint {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
+      z-index: 2;
+      color: rgba(255,255,255,0.85);
+      font-size: clamp(14px, 4vw, 18px);
+      text-align: center;
+      padding: 0 20px;
+    }
+
     /* Утилиты */
     .hidden { display: none; }
   </style>
@@ -219,7 +283,7 @@
 <body>
 
 <div class="card">
-  <h1 id="pageTitle">📦 Сканер упаковки v110</h1>
+  <h1 id="pageTitle">📦 Сканер упаковки v111</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -243,6 +307,7 @@
     <p class="barcode-label">Введите или отсканируйте штрих-код</p>
     <input type="text" id="barcodeInput" placeholder="Штрих-код..." autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn btn-primary" onclick="onSearch()">Найти</button>
+    <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
   </div>
 
   <!-- ALREADY_PACKED -->
@@ -358,6 +423,7 @@ function goIdle() {
   clearErrorTimer();
   clearTimer();
   closePhotoFullscreen();
+  closeCamera();
   var t = document.getElementById('pageTitle');
   if (t) t.style.display = '';
   currentModel = '';
@@ -617,6 +683,61 @@ function showError(msg) {
   showState('stateError');
 }
 
+// ── Камера ──
+var codeReader = null;
+var zxingLoaded = false;
+
+function loadZXing() {
+  return new Promise(function(resolve, reject) {
+    if (zxingLoaded) { resolve(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+    s.onload = function() { zxingLoaded = true; resolve(); };
+    s.onerror = function() { reject(new Error('Не удалось загрузить библиотеку сканирования')); };
+    document.head.appendChild(s);
+  });
+}
+
+function openCamera() {
+  document.getElementById('cameraOverlay').classList.add('active');
+  loadZXing()
+    .then(function() {
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.ITF,
+      ]);
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      return codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
+        document.getElementById('cameraVideo'),
+        function(result, err) {
+          if (result) {
+            closeCamera();
+            document.getElementById('barcodeInput').value = result.getText();
+            onSearch();
+          }
+        }
+      );
+    })
+    .catch(function(e) {
+      closeCamera();
+      showError('Камера недоступна: ' + (e.message || e));
+      startErrorTimer();
+    });
+}
+
+function closeCamera() {
+  document.getElementById('cameraOverlay').classList.remove('active');
+  if (codeReader) {
+    try { codeReader.reset(); } catch(e) {}
+    codeReader = null;
+  }
+}
+
 // ── Полноэкранное фото ──
 function openPhotoFullscreen(src) {
   var overlay = document.getElementById('photoOverlay');
@@ -650,6 +771,16 @@ window.onload = function() {
 <!-- Полноэкранное фото -->
 <div class="photo-overlay" id="photoOverlay" onclick="closePhotoFullscreen()">
   <img id="photoOverlayImg" src="" alt="Фото">
+</div>
+
+<!-- Камера -->
+<div id="cameraOverlay" class="camera-overlay">
+  <video id="cameraVideo" autoplay muted playsinline></video>
+  <div class="scan-zone">
+    <div class="scan-line"></div>
+  </div>
+  <button class="camera-close-btn" onclick="closeCamera()">✕</button>
+  <div class="camera-hint">Наведите штрих-код в рамку</div>
 </div>
 
 </body>
