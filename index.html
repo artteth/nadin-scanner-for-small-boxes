@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   
-  <title>Сканер упаковки v106</title>
+  <title>Сканер упаковки v107</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
@@ -176,7 +176,7 @@
 <body>
 
 <div class="card">
-  <h1 id="pageTitle">📦 Сканер упаковки v106</h1>
+  <h1 id="pageTitle">📦 Сканер упаковки v107</h1>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -212,7 +212,7 @@
     <div class="packed-model" id="packedModel"></div>
     <div class="packed-type" id="packedType"></div>
     <div class="packed-photo" id="packedPhoto" style="display:none">
-      <img id="packedPhotoImg" src="" alt="Изделие">
+      <img id="packedPhotoImg" src="" alt="Изделие" onclick="openPhotoFullscreen(this.src)">
     </div>
     <button class="btn btn-ok" id="btnOk" onclick="onOk()">
       OK (<span id="timerCount">10</span>)
@@ -392,7 +392,13 @@ function onSearch() {
   // Фото или "фото не найдено"
   const photoEl = document.getElementById('scanPhoto');
   if (item.photoUrl) {
-    photoEl.innerHTML = '<img src="' + item.photoUrl + '" alt="Изделие" onclick="openPhotoFullscreen(this.src)">';
+    const img = document.createElement('img');
+    img.src = item.photoUrl;
+    img.alt = 'Изделие';
+    img.id = 'scanPhotoImg';
+    img.onclick = function() { openPhotoFullscreen(this.src); };
+    photoEl.innerHTML = '';
+    photoEl.appendChild(img);;
   } else {
     photoEl.innerHTML = '<div class="no-photo">Фото не найдено</div>';
   }
