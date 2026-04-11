@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v119</title>
+  <title>Сканер упаковки v120</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -373,7 +373,7 @@
     }
     .tbl-search-wrap input:focus { border-color: #15803d; }
     .tbl-scroll {
-      overflow-x: auto;
+      overflow-x: visible;
       -webkit-overflow-scrolling: touch;
     }
     .tbl-table { width: 100%; border-collapse: collapse; min-width: 340px; }
@@ -487,7 +487,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v119</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v120</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -543,10 +543,11 @@
     <p class="select-label">Выберите тип упаковки</p>
     <p class="select-model" id="selectModel"></p>
     <div id="packButtons">
-      <button class="pack-btn" onclick="selectPack(this,'коробка мелкая старая пробная')">коробка мелкая старая пробная</button>
-      <button class="pack-btn" onclick="selectPack(this,'коробка S 28x19.5x30')">коробка S 28x19.5x30</button>
+      <button class="pack-btn" onclick="selectPack(this,'3см коробка S (30x28x19.5)')">3см коробка S (30x28x19.5)</button>
+      <button class="pack-btn" onclick="selectPack(this,'5см коробка M (50x28x19.5)')">5см коробка M (50x28x19.5)</button>
       <button class="pack-btn" onclick="selectPack(this,'пакет S 30x20')">пакет S 30x20</button>
       <button class="pack-btn" onclick="selectPack(this,'пакет L 60x30')">пакет L 60x30</button>
+      <button class="pack-btn" onclick="selectPack(this,'коробка мелкая старая пробная')">коробка мелкая старая пробная</button>
     </div>
     <button class="btn btn-primary" id="btnSavePack" onclick="onSave()" style="margin-top:16px;opacity:0.4;pointer-events:none">Сохранить</button>
     <button class="btn btn-secondary" onclick="goIdle()">Отмена</button>
