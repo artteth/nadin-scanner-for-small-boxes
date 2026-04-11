@@ -496,6 +496,53 @@
       width: 100%;
       flex: 1;
       min-height: 0;
+      position: relative;
+    }
+    #scanbotControls {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+      left: 0; right: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 100001;
+      padding: 0 20px;
+    }
+    #scanbotControls.visible { display: flex; }
+    .scanbot-ctrl-btn {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.4);
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .scanbot-ctrl-btn.active-torch {
+      background: rgba(255, 200, 0, 0.5);
+      border-color: rgba(255,200,0,0.8);
+    }
+    #scanbotZoomControls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 28px;
+      padding: 6px 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+    #scanbotZoomControls button {
+      background: none; border: none; color: white;
+      font-size: 26px; line-height: 1; cursor: pointer;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #scanbotZoomLevel {
+      color: white; font-size: 15px; font-weight: 600;
+      min-width: 32px; text-align: center;
     }
 
     /* Утилиты */
@@ -1278,18 +1325,32 @@ function closeCamera() {
   }
 }
 
-// ── Scanbot SDK v8 + ZXing fallback ──
+// ── Scanbot SDK v8 ──
 var scanbotSdkInstance = null;
-var scanbotFallbackReader = null;
+var scanbotVideoTrack = null;
+var scanbotTorchOn = false;
+var scanbotZoomVal = 1;
+var scanbotTrackRetries = 0;
+
+var SCANBOT_ALL_FORMATS = [
+  'EAN_13','EAN_8','UPC_A','UPC_E',
+  'CODE_128','CODE_39','CODE_93','CODABAR','ITF',
+  'QR_CODE','DATA_MATRIX','AZTEC','PDF_417','MICRO_QR_CODE'
+];
 
 function openScanbot() {
   document.getElementById('scanbotOverlay').classList.add('active');
+  document.getElementById('scanbotControls').classList.remove('visible');
+  scanbotTorchOn = false;
+  scanbotZoomVal = 1;
+  scanbotVideoTrack = null;
+  scanbotTrackRetries = 0;
+
   var container = document.getElementById('scanbotContainer');
   container.innerHTML = '<div style="color:white;text-align:center;padding:40px;font-size:16px">Инициализация камеры...</div>';
 
   if (typeof ScanbotSDK === 'undefined') {
-    // SDK ещё грузится — небольшая задержка и повтор
-    setTimeout(openScanbot, 600);
+    container.innerHTML = '<div style="color:white;text-align:center;padding:40px">SDK не загружен. Обновите страницу.</div>';
     return;
   }
 
@@ -1297,7 +1358,7 @@ function openScanbot() {
     var sdk = new ScanbotSDK({
       licenseKey: '',
       containerId: 'scanbotContainer',
-      barcodeFormats: ['EAN_13', 'EAN_8', 'CODE_128', 'CODE_39', 'ITF'],
+      barcodeFormats: SCANBOT_ALL_FORMATS,
     });
     scanbotSdkInstance = sdk;
 
@@ -1312,60 +1373,84 @@ function openScanbot() {
       },
       onError: function(err) {
         console.error('[Scanbot]', err);
-        openScanbotFallback();
+        var container = document.getElementById('scanbotContainer');
+        if (container) container.innerHTML = '<div style="color:white;text-align:center;padding:40px">Ошибка: ' + (err.message || err) + '</div>';
       }
     });
+
+    // Получаем видеотрек для управления зумом и фонариком
+    setTimeout(tryGetScanbotTrack, 800);
   } catch(err) {
     console.error('[Scanbot]', err);
-    openScanbotFallback();
+    container.innerHTML = '<div style="color:white;text-align:center;padding:40px">Ошибка: ' + (err.message || err) + '</div>';
   }
 }
 
-function openScanbotFallback() {
-  var container = document.getElementById('scanbotContainer');
-  container.innerHTML = '';
-  var video = document.createElement('video');
-  video.autoplay = true; video.muted = true;
-  video.setAttribute('playsinline', 'true');
-  video.style.cssText = 'width:100%;height:100%;object-fit:cover';
-  container.appendChild(video);
+function tryGetScanbotTrack() {
+  var video = document.querySelector('#scanbotContainer video');
+  if (video && video.srcObject) {
+    var tracks = video.srcObject.getVideoTracks();
+    if (tracks.length > 0) {
+      scanbotVideoTrack = tracks[0];
+      showScanbotControls();
+      return;
+    }
+  }
+  scanbotTrackRetries++;
+  if (scanbotTrackRetries < 10) setTimeout(tryGetScanbotTrack, 400);
+}
 
-  loadZXing().then(function() {
-    var hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.ITF,
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    scanbotFallbackReader = new ZXing.BrowserMultiFormatReader(hints);
-    return scanbotFallbackReader.decodeFromConstraints(
-      { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
-      video,
-      function(result) {
-        if (result) {
-          closeScanbot();
-          document.getElementById('barcodeInput').value = result.getText();
-          onSearch();
-        }
-      }
-    );
-  }).catch(function(e) {
-    closeScanbot();
-    showError('Сканер недоступен: ' + (e.message || e));
-    startErrorTimer();
-  });
+function showScanbotControls() {
+  if (!scanbotVideoTrack) return;
+  var caps = scanbotVideoTrack.getCapabilities ? scanbotVideoTrack.getCapabilities() : {};
+  var controls = document.getElementById('scanbotControls');
+  var torchBtn = document.getElementById('scanbotTorchBtn');
+  var zoomDiv = document.getElementById('scanbotZoomControls');
+
+  var hasTorch = !!(caps.torch);
+  var hasZoom  = !!(caps.zoom);
+
+  torchBtn.style.display = hasTorch ? 'flex' : 'none';
+  zoomDiv.style.display  = hasZoom  ? 'flex' : 'none';
+
+  if (hasZoom) {
+    var s = scanbotVideoTrack.getSettings();
+    scanbotZoomVal = s.zoom || caps.zoom.min || 1;
+    document.getElementById('scanbotZoomLevel').textContent = scanbotZoomVal.toFixed(1) + '×';
+  }
+
+  if (hasTorch || hasZoom) controls.classList.add('visible');
+}
+
+function toggleScanbotTorch() {
+  if (!scanbotVideoTrack) return;
+  scanbotTorchOn = !scanbotTorchOn;
+  scanbotVideoTrack.applyConstraints({ advanced: [{ torch: scanbotTorchOn }] }).catch(function(){});
+  var btn = document.getElementById('scanbotTorchBtn');
+  btn.classList.toggle('active-torch', scanbotTorchOn);
+}
+
+function scanbotZoom(dir) {
+  if (!scanbotVideoTrack) return;
+  var caps = scanbotVideoTrack.getCapabilities ? scanbotVideoTrack.getCapabilities() : {};
+  if (!caps.zoom) return;
+  var step = Math.max(0.1, ((caps.zoom.max - caps.zoom.min) / 10));
+  scanbotZoomVal = Math.min(caps.zoom.max, Math.max(caps.zoom.min, scanbotZoomVal + dir * step));
+  scanbotVideoTrack.applyConstraints({ advanced: [{ zoom: scanbotZoomVal }] }).catch(function(){});
+  document.getElementById('scanbotZoomLevel').textContent = scanbotZoomVal.toFixed(1) + '×';
 }
 
 function closeScanbot() {
   document.getElementById('scanbotOverlay').classList.remove('active');
+  document.getElementById('scanbotControls').classList.remove('visible');
+  if (scanbotTorchOn && scanbotVideoTrack) {
+    scanbotVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(function(){});
+  }
+  scanbotTorchOn = false;
+  scanbotVideoTrack = null;
   if (scanbotSdkInstance) {
     try { scanbotSdkInstance.stopScanner(); } catch(e) {}
     scanbotSdkInstance = null;
-  }
-  if (scanbotFallbackReader) {
-    try { scanbotFallbackReader.reset(); } catch(e) {}
-    scanbotFallbackReader = null;
   }
 }
 
@@ -1499,7 +1584,15 @@ window.onload = function() {
 <!-- Scanbot -->
 <div id="scanbotOverlay">
   <div id="scanbotContainer"></div>
-  <button class="camera-close-btn" onclick="closeScanbot()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:100000">✕</button>
+  <div id="scanbotControls">
+    <div id="scanbotZoomControls">
+      <button onclick="scanbotZoom(-1)">−</button>
+      <span id="scanbotZoomLevel">1×</span>
+      <button onclick="scanbotZoom(1)">+</button>
+    </div>
+    <button id="scanbotTorchBtn" class="scanbot-ctrl-btn" onclick="toggleScanbotTorch()">🔦</button>
+  </div>
+  <button class="camera-close-btn" onclick="closeScanbot()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:100001">✕</button>
 </div>
 
 <!-- Камера -->
