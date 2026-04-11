@@ -1274,78 +1274,48 @@ function closeCamera() {
   }
 }
 
-// ── Scanbot (BarcodeDetector + полифил для iOS) ──
-var scanbotStream = null;
-var scanbotAnimFrame = null;
-var scanbotDetector = null;
-
-function getDetectorClass() {
-  if ('BarcodeDetector' in window) {
-    return Promise.resolve(window.BarcodeDetector);
-  }
-  return import('https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@2/dist/index.js')
-    .then(function(mod) { return mod.BarcodeDetectorPolyfill; });
-}
+// ── Scanbot (ZXing, работает на iOS и Android) ──
+var scanbotReader = null;
 
 function openScanbot() {
   document.getElementById('scanbotOverlay').classList.add('active');
-  var video = document.getElementById('scanbotVideo');
-  var canvas = document.getElementById('scanbotCanvas');
-  var ctx = canvas.getContext('2d');
-
-  getDetectorClass()
-    .then(function(DetectorClass) {
-      if (!scanbotDetector) {
-        scanbotDetector = new DetectorClass({
-          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'qr_code', 'data_matrix']
-        });
-      }
-      return navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-    })
-    .then(function(stream) {
-      scanbotStream = stream;
-      video.srcObject = stream;
-      video.play();
-      video.onloadedmetadata = function() {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        scanFrame();
-      };
+  loadZXing()
+    .then(function() {
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.ITF,
+      ]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      scanbotReader = new ZXing.BrowserMultiFormatReader(hints);
+      return scanbotReader.decodeFromConstraints(
+        { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
+        document.getElementById('scanbotVideo'),
+        function(result, err) {
+          if (result) {
+            closeScanbot();
+            document.getElementById('barcodeInput').value = result.getText();
+            onSearch();
+          }
+        }
+      );
     })
     .catch(function(e) {
       closeScanbot();
       showError('Сканер недоступен: ' + (e.message || e));
       startErrorTimer();
     });
-
-  function scanFrame() {
-    if (!scanbotStream) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    scanbotDetector.detect(canvas).then(function(barcodes) {
-      if (barcodes && barcodes.length > 0) {
-        closeScanbot();
-        document.getElementById('barcodeInput').value = barcodes[0].rawValue;
-        onSearch();
-        return;
-      }
-      scanbotAnimFrame = requestAnimationFrame(scanFrame);
-    }).catch(function() {
-      scanbotAnimFrame = requestAnimationFrame(scanFrame);
-    });
-  }
 }
 
 function closeScanbot() {
   document.getElementById('scanbotOverlay').classList.remove('active');
-  if (scanbotAnimFrame) { cancelAnimationFrame(scanbotAnimFrame); scanbotAnimFrame = null; }
-  if (scanbotStream) {
-    scanbotStream.getTracks().forEach(function(t) { t.stop(); });
-    scanbotStream = null;
+  if (scanbotReader) {
+    try { scanbotReader.reset(); } catch(e) {}
+    scanbotReader = null;
   }
-  var video = document.getElementById('scanbotVideo');
-  if (video) { video.srcObject = null; }
 }
 
 // ── Полноэкранное фото ──
@@ -1478,7 +1448,6 @@ window.onload = function() {
 <!-- Scanbot -->
 <div id="scanbotOverlay">
   <video id="scanbotVideo" autoplay muted playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover"></video>
-  <canvas id="scanbotCanvas" style="display:none"></canvas>
   <div class="scan-zone" style="position:relative;z-index:1">
     <div class="scan-line"></div>
   </div>
