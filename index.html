@@ -9,6 +9,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
+  <!-- Scanbot SDK v8 -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/ScanbotSDK.ui2.min.js"></script>
+
   <title>Сканер упаковки v120</title>
   <style>
     :root {
@@ -491,7 +494,8 @@
     #scanbotOverlay.active { display: flex; }
     #scanbotContainer {
       width: 100%;
-      height: 100%;
+      flex: 1;
+      min-height: 0;
     }
 
     /* Утилиты */
@@ -1274,47 +1278,94 @@ function closeCamera() {
   }
 }
 
-// ── Scanbot (ZXing, работает на iOS и Android) ──
-var scanbotReader = null;
+// ── Scanbot SDK v8 + ZXing fallback ──
+var scanbotSdkInstance = null;
+var scanbotFallbackReader = null;
 
 function openScanbot() {
   document.getElementById('scanbotOverlay').classList.add('active');
-  loadZXing()
-    .then(function() {
-      var hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.ITF,
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      scanbotReader = new ZXing.BrowserMultiFormatReader(hints);
-      return scanbotReader.decodeFromConstraints(
-        { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
-        document.getElementById('scanbotVideo'),
-        function(result, err) {
-          if (result) {
-            closeScanbot();
-            document.getElementById('barcodeInput').value = result.getText();
-            onSearch();
-          }
-        }
-      );
-    })
-    .catch(function(e) {
-      closeScanbot();
-      showError('Сканер недоступен: ' + (e.message || e));
-      startErrorTimer();
+  var container = document.getElementById('scanbotContainer');
+  container.innerHTML = '<div style="color:white;text-align:center;padding:40px;font-size:16px">Инициализация камеры...</div>';
+
+  if (typeof ScanbotSDK === 'undefined') {
+    // SDK ещё грузится — небольшая задержка и повтор
+    setTimeout(openScanbot, 600);
+    return;
+  }
+
+  try {
+    var sdk = new ScanbotSDK({
+      licenseKey: '',
+      containerId: 'scanbotContainer',
+      barcodeFormats: ['EAN_13', 'EAN_8', 'CODE_128', 'CODE_39', 'ITF'],
     });
+    scanbotSdkInstance = sdk;
+
+    sdk.startScanner({
+      onScan: function(result) {
+        if (result && result.barcode && result.barcode.text) {
+          sdk.stopScanner();
+          closeScanbot();
+          document.getElementById('barcodeInput').value = result.barcode.text;
+          onSearch();
+        }
+      },
+      onError: function(err) {
+        console.error('[Scanbot]', err);
+        openScanbotFallback();
+      }
+    });
+  } catch(err) {
+    console.error('[Scanbot]', err);
+    openScanbotFallback();
+  }
+}
+
+function openScanbotFallback() {
+  var container = document.getElementById('scanbotContainer');
+  container.innerHTML = '';
+  var video = document.createElement('video');
+  video.autoplay = true; video.muted = true;
+  video.setAttribute('playsinline', 'true');
+  video.style.cssText = 'width:100%;height:100%;object-fit:cover';
+  container.appendChild(video);
+
+  loadZXing().then(function() {
+    var hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.ITF,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    scanbotFallbackReader = new ZXing.BrowserMultiFormatReader(hints);
+    return scanbotFallbackReader.decodeFromConstraints(
+      { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      video,
+      function(result) {
+        if (result) {
+          closeScanbot();
+          document.getElementById('barcodeInput').value = result.getText();
+          onSearch();
+        }
+      }
+    );
+  }).catch(function(e) {
+    closeScanbot();
+    showError('Сканер недоступен: ' + (e.message || e));
+    startErrorTimer();
+  });
 }
 
 function closeScanbot() {
   document.getElementById('scanbotOverlay').classList.remove('active');
-  if (scanbotReader) {
-    try { scanbotReader.reset(); } catch(e) {}
-    scanbotReader = null;
+  if (scanbotSdkInstance) {
+    try { scanbotSdkInstance.stopScanner(); } catch(e) {}
+    scanbotSdkInstance = null;
+  }
+  if (scanbotFallbackReader) {
+    try { scanbotFallbackReader.reset(); } catch(e) {}
+    scanbotFallbackReader = null;
   }
 }
 
@@ -1447,12 +1498,8 @@ window.onload = function() {
 
 <!-- Scanbot -->
 <div id="scanbotOverlay">
-  <video id="scanbotVideo" autoplay muted playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover"></video>
-  <div class="scan-zone" style="position:relative;z-index:1">
-    <div class="scan-line"></div>
-  </div>
+  <div id="scanbotContainer"></div>
   <button class="camera-close-btn" onclick="closeScanbot()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:100000">✕</button>
-  <div class="camera-hint">Наведите штрих-код в рамку</div>
 </div>
 
 <!-- Камера -->
