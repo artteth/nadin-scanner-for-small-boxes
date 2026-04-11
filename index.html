@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v117</title>
+  <title>Сканер упаковки v118</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -312,13 +312,17 @@
       inset: 0;
       z-index: 50000;
       background: #f0f4f8;
-      display: flex;
-      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
       transform: translateY(100%);
       transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .table-overlay.active { transform: translateY(0); }
     .tbl-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -326,7 +330,6 @@
       color: white;
       padding: 12px 16px;
       padding-top: max(12px, env(safe-area-inset-top));
-      flex-shrink: 0;
     }
     .tbl-back-btn {
       background: rgba(255,255,255,0.15);
@@ -345,7 +348,6 @@
       padding: 10px 12px;
       background: white;
       border-bottom: 1px solid #e5e7eb;
-      flex-shrink: 0;
     }
     .tbl-tab {
       height: 34px; padding: 0 14px;
@@ -362,7 +364,6 @@
       padding: 8px 12px;
       background: white;
       border-bottom: 1px solid #e5e7eb;
-      flex-shrink: 0;
     }
     .tbl-search-wrap input {
       width: 100%; height: 40px;
@@ -372,8 +373,6 @@
     }
     .tbl-search-wrap input:focus { border-color: #15803d; }
     .tbl-scroll {
-      flex: 1;
-      overflow-y: auto;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
     }
@@ -383,7 +382,9 @@
       font-size: 10px; font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.05em;
       padding: 9px 10px; text-align: left;
-      position: sticky; top: 0; z-index: 5;
+      position: sticky;
+      top: var(--tbl-topbar-h, 48px);
+      z-index: 5;
       white-space: nowrap;
     }
     .tbl-table thead th.tbl-center { text-align: center; }
@@ -486,7 +487,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v117</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v118</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1010,11 +1011,16 @@ var tableChangedModels = new Set();
 var TABLE_PACK_TYPES = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
 
 function openTableView() {
+  document.getElementById('tableView').classList.add('active');
+  document.getElementById('tableView').scrollTop = 0;
+  document.getElementById('tblSearch').value = '';
   buildTypeTabs();
   renderTableView();
-  document.getElementById('tableView').classList.add('active');
-  document.getElementById('tblSearch').value = '';
-  document.getElementById('tblSearch').focus();
+  // Замеряем высоту топбара после отрисовки для sticky thead
+  requestAnimationFrame(function() {
+    var h = document.querySelector('.tbl-topbar').offsetHeight;
+    document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
+  });
 }
 
 function closeTableView() {
