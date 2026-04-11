@@ -9,8 +9,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v111</title>
+  <title>Сканер упаковки v112</title>
   <style>
+    :root {
+      --pack-font-size: 56px;
+      --pack-font-family: Arial, sans-serif;
+      --pack-color: #15803d;
+      --photo-max-height: 300px;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html {
       height: 100%;
@@ -51,13 +57,31 @@
       box-sizing: border-box;
     }
 
+    .card-header {
+      position: relative;
+      margin: 0 0 clamp(12px, 3vw, 24px);
+    }
     h1 {
       font-size: clamp(24px, 6vw, 48px);
       font-weight: 700;
       color: #111827;
-      margin: 0 0 clamp(12px, 3vw, 24px);
+      margin: 0;
       text-align: center;
       line-height: 1.2;
+      padding-right: clamp(28px, 7vw, 44px);
+    }
+    .settings-btn {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      font-size: clamp(20px, 5vw, 32px);
+      cursor: pointer;
+      padding: 2px 4px;
+      color: #9ca3af;
+      line-height: 1;
     }
 
     /* ── IDLE состояние ── */
@@ -103,12 +127,12 @@
     .packed-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
     .packed-icon-small { font-size: 24px; }
     .packed-title-inline { font-size: 20px; font-weight: 700; color: #15803d; }
-    .packed-photo { text-align: center; margin: 10px 0 0; }
-    .packed-photo img { max-width: 100%; max-height: 250px; border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .packed-photo { text-align: center; margin: 4px 0 0; }
+    .packed-photo img { max-width: 100%; max-height: var(--photo-max-height); border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
     .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
     .packed-barcode { font-size: 20px; color: #111827; text-align: center; font-weight: 700; margin-bottom: 4px; font-family: monospace; }
-    .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 4px; font-family: monospace; }
-    .packed-type { font-size: 56px; color: #15803d; text-align: center; font-weight: 700; margin-bottom: 24px; line-height: 1.2; }
+    .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 2px; font-family: monospace; }
+    .packed-type { font-size: var(--pack-font-size); font-family: var(--pack-font-family); color: var(--pack-color); text-align: center; font-weight: 700; margin-bottom: 8px; line-height: 1.2; }
 
     .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
     .btn-ok:active { background: #166534; }
@@ -185,7 +209,7 @@
     .scan-barcode { font-size: 18px; color: #111827; margin-bottom: 4px; font-family: monospace; font-weight: 700; }
     .scan-model { font-size: 18px; font-weight: 700; color: #111827; font-family: monospace; margin-bottom: 8px; }
     .scan-photo { text-align: center; margin: 12px 0 0; }
-    .scan-photo img { max-width: 100%; max-height: 300px; border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .scan-photo img { max-width: 100%; max-height: var(--photo-max-height); border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
     .no-photo { color: #9ca3af; font-size: 14px; font-style: italic; margin: 12px 0; }
 
     /* Полноэкранное фото */
@@ -211,6 +235,61 @@
       box-shadow: 0 0 60px rgba(0,0,0,0.5);
       object-fit: contain;
     }
+
+    /* ── НАСТРОЙКИ ── */
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99997;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .settings-overlay.active { display: flex; }
+    .settings-panel {
+      background: white;
+      width: 100%;
+      max-width: min(600px, 100vw);
+      max-height: 88dvh;
+      border-radius: 20px 20px 0 0;
+      padding: clamp(16px, 4vw, 28px);
+      padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .settings-title { font-size: clamp(18px, 5vw, 24px); font-weight: 700; color: #111827; }
+    .settings-close-btn {
+      background: #f3f4f6; border: none;
+      width: 36px; height: 36px; border-radius: 50%;
+      font-size: 18px; cursor: pointer; color: #374151;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .settings-group { margin-bottom: 18px; }
+    .settings-label { font-size: clamp(13px, 3.5vw, 15px); color: #374151; margin-bottom: 8px; font-weight: 600; }
+    .settings-select {
+      width: 100%; height: 48px; font-size: 16px;
+      border: 2px solid #d1d5db; border-radius: 10px;
+      padding: 0 12px; color: #111827; background: #f9fafb; outline: none;
+    }
+    .settings-select:focus { border-color: #15803d; }
+    .settings-range { width: 100%; accent-color: #15803d; cursor: pointer; margin-top: 4px; }
+    .settings-color {
+      width: 64px; height: 48px;
+      border: 2px solid #d1d5db; border-radius: 10px;
+      cursor: pointer; padding: 4px; background: white;
+    }
+    .settings-preview-box {
+      background: #f8fafc; border-radius: 12px;
+      padding: 12px 16px; text-align: center; margin-bottom: 16px;
+    }
+    .settings-preview-label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
 
     /* ── КАМЕРА ── */
     .camera-overlay {
@@ -283,7 +362,10 @@
 <body>
 
 <div class="card">
-  <h1 id="pageTitle">📦 Сканер упаковки v111</h1>
+  <div class="card-header">
+    <h1 id="pageTitle">📦 Сканер упаковки v112</h1>
+    <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
+  </div>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -373,6 +455,102 @@
 </div>
 
 <script>
+// ── Настройки ──
+var settings = {
+  packTypeFontFamily: 'Arial, sans-serif',
+  packTypeFontSize: 56,
+  packTypeColor: '#15803d',
+  photoMaxHeight: 300,
+  timerPacked: 10,
+  timerError: 5,
+};
+var SETTINGS_KEY = 'scannerSettings_v1';
+
+function loadSettings() {
+  try {
+    var saved = localStorage.getItem(SETTINGS_KEY);
+    if (saved) Object.assign(settings, JSON.parse(saved));
+  } catch(e) {}
+  applySettings();
+  syncSettingsUI();
+}
+
+function applySettings() {
+  var r = document.documentElement;
+  r.style.setProperty('--pack-font-size', settings.packTypeFontSize + 'px');
+  r.style.setProperty('--pack-font-family', settings.packTypeFontFamily);
+  r.style.setProperty('--pack-color', settings.packTypeColor);
+  r.style.setProperty('--photo-max-height', settings.photoMaxHeight + 'px');
+}
+
+function syncSettingsUI() {
+  document.getElementById('setFontFamily').value = settings.packTypeFontFamily;
+  document.getElementById('setFontSize').value = settings.packTypeFontSize;
+  document.getElementById('setFontSizeVal').textContent = settings.packTypeFontSize;
+  document.getElementById('setColor').value = settings.packTypeColor;
+  document.getElementById('setPhotoSize').value = settings.photoMaxHeight;
+  document.getElementById('setPhotoSizeVal').textContent = settings.photoMaxHeight;
+  document.getElementById('setTimer1').value = settings.timerPacked;
+  document.getElementById('setTimer1Val').textContent = settings.timerPacked;
+  document.getElementById('setTimer2').value = settings.timerError;
+  document.getElementById('setTimer2Val').textContent = settings.timerError;
+  updateSettingsPreview(settings);
+}
+
+function openSettings() {
+  syncSettingsUI();
+  document.getElementById('settingsOverlay').classList.add('active');
+}
+
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('active');
+  applySettings(); // откатываем незасохранённый предпросмотр
+}
+
+function previewSettings() {
+  var t = readSettingsFromUI();
+  document.getElementById('setFontSizeVal').textContent = t.packTypeFontSize;
+  document.getElementById('setPhotoSizeVal').textContent = t.photoMaxHeight;
+  document.getElementById('setTimer1Val').textContent = t.timerPacked;
+  document.getElementById('setTimer2Val').textContent = t.timerError;
+  var r = document.documentElement;
+  r.style.setProperty('--pack-font-size', t.packTypeFontSize + 'px');
+  r.style.setProperty('--pack-font-family', t.packTypeFontFamily);
+  r.style.setProperty('--pack-color', t.packTypeColor);
+  r.style.setProperty('--photo-max-height', t.photoMaxHeight + 'px');
+  updateSettingsPreview(t);
+}
+
+function updateSettingsPreview(t) {
+  var el = document.getElementById('settingsPreview');
+  if (!el) return;
+  el.style.fontFamily = t.packTypeFontFamily;
+  el.style.fontSize = t.packTypeFontSize + 'px';
+  el.style.color = t.packTypeColor;
+}
+
+function readSettingsFromUI() {
+  return {
+    packTypeFontFamily: document.getElementById('setFontFamily').value,
+    packTypeFontSize: parseInt(document.getElementById('setFontSize').value),
+    packTypeColor: document.getElementById('setColor').value,
+    photoMaxHeight: parseInt(document.getElementById('setPhotoSize').value),
+    timerPacked: parseInt(document.getElementById('setTimer1').value),
+    timerError: parseInt(document.getElementById('setTimer2').value),
+  };
+}
+
+function saveSettings() {
+  settings = readSettingsFromUI();
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
+  applySettings();
+  document.getElementById('settingsOverlay').classList.remove('active');
+}
+
+function settingsOverlayBgClick(e) {
+  if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+}
+
 // ── Apps Script URL — бэкенд ──
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwg4XoEi9Gmxv-SY2K_KglrSh64agoFitr6pwCIM9MxubDaq50URogmfDpEkuZc7NBUag/exec';
 
@@ -551,12 +729,12 @@ let errorTimerSeconds = 5;
 
 function startErrorTimer() {
   clearErrorTimer();
-  errorTimerSeconds = 5;
+  errorTimerSeconds = settings.timerError;
   updateErrorTimerDisplay();
   document.getElementById('errorTimerBar').style.width = '100%';
   setTimeout(function() {
     document.getElementById('errorTimerBar').style.width = '0%';
-    document.getElementById('errorTimerBar').style.transitionDuration = '5s';
+    document.getElementById('errorTimerBar').style.transitionDuration = settings.timerError + 's';
   }, 50);
   errorTimerInterval = setInterval(function() {
     errorTimerSeconds--;
@@ -583,13 +761,13 @@ function clearErrorTimer() {
 
 function startTimer() {
   clearTimer();
-  timerSeconds = 10;
+  timerSeconds = settings.timerPacked;
   updateTimerDisplay();
   document.getElementById('timerBar').style.width = '100%';
 
   setTimeout(function() {
     document.getElementById('timerBar').style.width = '0%';
-    document.getElementById('timerBar').style.transitionDuration = '10s';
+    document.getElementById('timerBar').style.transitionDuration = settings.timerPacked + 's';
   }, 50);
 
   timerInterval = setInterval(function() {
@@ -759,8 +937,9 @@ function closePhotoFullscreen() {
   if (overlay) overlay.classList.remove('active');
 }
 
-// При загрузке: фокус + предзагрузка всех данных + SW
+// При загрузке: настройки + данные + SW
 window.onload = function() {
+  loadSettings();
   preloadAllData();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
@@ -771,6 +950,60 @@ window.onload = function() {
 <!-- Полноэкранное фото -->
 <div class="photo-overlay" id="photoOverlay" onclick="closePhotoFullscreen()">
   <img id="photoOverlayImg" src="" alt="Фото">
+</div>
+
+<!-- Настройки -->
+<div id="settingsOverlay" class="settings-overlay" onclick="settingsOverlayBgClick(event)">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <span class="settings-title">⚙️ Настройки</span>
+      <button class="settings-close-btn" onclick="closeSettings()">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Шрифт типа упаковки</div>
+      <select id="setFontFamily" class="settings-select" onchange="previewSettings()">
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="Georgia, serif">Georgia</option>
+        <option value="'Courier New', monospace">Courier New</option>
+        <option value="Impact, sans-serif">Impact</option>
+        <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Размер шрифта: <b id="setFontSizeVal">56</b> px</div>
+      <input type="range" id="setFontSize" class="settings-range" min="20" max="120" value="56" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Цвет текста</div>
+      <input type="color" id="setColor" class="settings-color" value="#15803d" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-preview-box">
+      <div class="settings-preview-label">Предпросмотр</div>
+      <div id="settingsPreview" style="font-weight:700;line-height:1.2">коробка S 28x19.5x30</div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Размер картинки: <b id="setPhotoSizeVal">300</b> px</div>
+      <input type="range" id="setPhotoSize" class="settings-range" min="80" max="500" value="300" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Таймер «Уже упаковано»: <b id="setTimer1Val">10</b> сек</div>
+      <input type="range" id="setTimer1" class="settings-range" min="3" max="60" value="10" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Таймер ошибки: <b id="setTimer2Val">5</b> сек</div>
+      <input type="range" id="setTimer2" class="settings-range" min="2" max="30" value="5" oninput="previewSettings()">
+    </div>
+
+    <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+    <button class="btn btn-secondary" onclick="closeSettings()" style="margin-top:10px">Отмена</button>
+  </div>
 </div>
 
 <!-- Камера -->
