@@ -1015,12 +1015,18 @@ function openTableView() {
   document.getElementById('tableView').classList.add('active');
   document.getElementById('tableView').scrollTop = 0;
   document.getElementById('tblSearch').value = '';
+  document.getElementById('tblBody').innerHTML = '';
+  document.getElementById('tblEmpty').style.display = 'none';
+  document.getElementById('tblLoading').style.display = '';
   buildTypeTabs();
-  renderTableView();
-  // Замеряем высоту топбара после отрисовки для sticky thead
+  // Откладываем рендер чтобы не блокировать CSS-анимацию открытия
   requestAnimationFrame(function() {
-    var h = document.querySelector('.tbl-topbar').offsetHeight;
-    document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
+    requestAnimationFrame(function() {
+      renderTableView();
+      document.getElementById('tblLoading').style.display = 'none';
+      var h = document.querySelector('.tbl-topbar').offsetHeight;
+      document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
+    });
   });
 }
 
@@ -1371,6 +1377,8 @@ window.onload = function() {
         </tr>
       </thead>
       <tbody id="tblBody"></tbody>
+  </table>
+  <div id="tblLoading" class="tbl-loading"><div class="tbl-spinner"></div></div>
     </table>
     <div id="tblEmpty" class="tbl-empty" style="display:none">Нет данных</div>
   </div>
