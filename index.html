@@ -503,6 +503,47 @@
       padding: 0 20px;
     }
 
+    /* ── НАТИВНЫЙ СКАНЕР iOS ── */
+    #nativeOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99999;
+      background: black;
+      display: none;
+      flex-direction: column;
+    }
+    #nativeOverlay.active { display: flex; }
+    #nativeVideo {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .native-aim {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -60%);
+      width: min(80vw, 340px);
+      height: min(28vw, 120px);
+      border: 2px solid #00ff00;
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .native-result {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+      left: 20px; right: 20px;
+      text-align: center;
+      color: white;
+      font-size: clamp(14px, 4vw, 18px);
+      z-index: 2;
+      background: rgba(0,0,0,0.4);
+      border-radius: 10px;
+      padding: 8px 12px;
+    }
+
     /* ── SCANBOT ── */
     #scanbotOverlay {
       position: fixed;
@@ -604,6 +645,7 @@
     <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
     <button class="btn btn-secondary" onclick="openScanbot()">📷 Расширенный сканер</button>
     <button class="btn btn-secondary" onclick="openScanbotSDK()">📱 Сканировать Scanbot</button>
+    <button class="btn btn-secondary" id="btnNativeScanner" style="display:none" onclick="openNativeScanner()">🍎 Нативный сканер iOS</button>
     <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
   </div>
 
@@ -1482,6 +1524,67 @@ function closeScanbot() {
   if (scanbotReader) { try { scanbotReader.reset(); } catch(e) {} scanbotReader = null; }
 }
 
+// ── Нативный сканер iOS (BarcodeDetector API) ──
+var nativeStream = null;
+var nativeScanInterval = null;
+var nativeDetector = null;
+
+(function checkNativeSupport() {
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS && 'BarcodeDetector' in window) {
+    var btn = document.getElementById('btnNativeScanner');
+    if (btn) btn.style.display = '';
+  }
+})();
+
+function openNativeScanner() {
+  document.getElementById('nativeOverlay').classList.add('active');
+  document.getElementById('nativeResult').textContent = 'Инициализация камеры...';
+
+  if (!nativeDetector) {
+    nativeDetector = new BarcodeDetector();
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+  }).then(function(stream) {
+    nativeStream = stream;
+    var video = document.getElementById('nativeVideo');
+    video.srcObject = stream;
+    video.play();
+    document.getElementById('nativeResult').textContent = 'Наведите камеру на штрих-код';
+
+    nativeScanInterval = setInterval(function() {
+      nativeDetector.detect(video).then(function(barcodes) {
+        if (barcodes.length > 0) {
+          var code = barcodes[0];
+          if (navigator.vibrate) navigator.vibrate(80);
+          closeNativeScanner();
+          document.getElementById('barcodeInput').value = code.rawValue;
+          onSearch();
+        }
+      }).catch(function() {});
+    }, 300);
+
+  }).catch(function(err) {
+    closeNativeScanner();
+    showError('Камера недоступна: ' + err.message);
+    startErrorTimer();
+  });
+}
+
+function closeNativeScanner() {
+  document.getElementById('nativeOverlay').classList.remove('active');
+  if (nativeScanInterval) { clearInterval(nativeScanInterval); nativeScanInterval = null; }
+  if (nativeStream) {
+    nativeStream.getTracks().forEach(function(t) { t.stop(); });
+    nativeStream = null;
+  }
+  var video = document.getElementById('nativeVideo');
+  if (video) video.srcObject = null;
+}
+
 // ── Scanbot SDK (UI2 API) ──
 var scanbotSdkInstance = null;
 
@@ -1640,6 +1743,14 @@ window.onload = function() {
     </table>
     <div id="tblEmpty" class="tbl-empty" style="display:none">Нет данных</div>
   </div>
+</div>
+
+<!-- Нативный сканер iOS -->
+<div id="nativeOverlay">
+  <video id="nativeVideo" autoplay muted playsinline></video>
+  <div class="native-aim"></div>
+  <button class="camera-close-btn" onclick="closeNativeScanner()" style="position:absolute;top:calc(env(safe-area-inset-top,0px)+16px);right:16px;z-index:3">✕</button>
+  <div class="native-result" id="nativeResult">Наведите камеру на штрих-код</div>
 </div>
 
 <!-- Scanbot -->
