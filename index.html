@@ -1542,6 +1542,11 @@ function openNativeScanner() {
   document.getElementById('nativeOverlay').classList.add('active');
   document.getElementById('nativeResult').textContent = 'Инициализация камеры...';
 
+  if (!('BarcodeDetector' in window)) {
+    document.getElementById('nativeResult').textContent = 'BarcodeDetector не поддерживается в этом браузере (нужен iOS 17.4+ Safari)';
+    return;
+  }
+
   if (!nativeDetector) {
     nativeDetector = new BarcodeDetector();
   }
@@ -1552,20 +1557,30 @@ function openNativeScanner() {
     nativeStream = stream;
     var video = document.getElementById('nativeVideo');
     video.srcObject = stream;
-    video.play();
-    document.getElementById('nativeResult').textContent = 'Наведите камеру на штрих-код';
 
-    nativeScanInterval = setInterval(function() {
-      nativeDetector.detect(video).then(function(barcodes) {
-        if (barcodes.length > 0) {
-          var code = barcodes[0];
-          if (navigator.vibrate) navigator.vibrate(80);
-          closeNativeScanner();
-          document.getElementById('barcodeInput').value = code.rawValue;
-          onSearch();
-        }
-      }).catch(function() {});
-    }, 300);
+    video.oncanplay = function() {
+      video.play().then(function() {
+        document.getElementById('nativeResult').textContent = 'Наведите камеру на штрих-код';
+        nativeScanInterval = setInterval(function() {
+          if (video.readyState < 2) return;
+          nativeDetector.detect(video).then(function(barcodes) {
+            if (barcodes.length > 0) {
+              var code = barcodes[0];
+              if (navigator.vibrate) navigator.vibrate(80);
+              closeNativeScanner();
+              document.getElementById('barcodeInput').value = code.rawValue;
+              onSearch();
+            }
+          }).catch(function() {});
+        }, 300);
+      }).catch(function(err) {
+        document.getElementById('nativeResult').textContent = 'Ошибка воспроизведения: ' + err.message;
+      });
+    };
+
+    video.onerror = function(e) {
+      document.getElementById('nativeResult').textContent = 'Ошибка видео: ' + (e.message || e);
+    };
 
   }).catch(function(err) {
     closeNativeScanner();
