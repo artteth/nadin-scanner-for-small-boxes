@@ -9,10 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <!-- Scanbot SDK v8 UI2 -->
-  <script type="module" src="https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/ScanbotSDK.ui2.min.js"></script>
-
-  <title>Сканер упаковки v122</title>
+  <title>Сканер упаковки v121</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -87,23 +84,6 @@
       color: #9ca3af;
       line-height: 1;
     }
-    .refresh-btn {
-      position: absolute;
-      right: clamp(32px, 8vw, 48px);
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      font-size: clamp(18px, 4.5vw, 28px);
-      cursor: pointer;
-      padding: 2px 4px;
-      color: #9ca3af;
-      line-height: 1;
-      transition: color 0.2s;
-    }
-    .refresh-btn:active { color: #15803d; }
-    .refresh-btn.spinning { animation: spinBtn 0.8s linear infinite; color: #15803d; }
-    @keyframes spinBtn { to { transform: translateY(-50%) rotate(360deg); } }
 
     /* ── IDLE состояние ── */
     .barcode-label {
@@ -393,10 +373,9 @@
     }
     .tbl-search-wrap input:focus { border-color: #15803d; }
     .tbl-scroll {
-      overflow-x: visible;
-      -webkit-overflow-scrolling: touch;
+      /* no overflow-x — иначе sticky thead ломается */
     }
-    .tbl-table { width: 100%; border-collapse: collapse; min-width: 340px; }
+    .tbl-table { width: 100%; border-collapse: collapse; }
     .tbl-table thead th {
       background: #1e293b; color: white;
       font-size: 10px; font-weight: 600;
@@ -417,7 +396,6 @@
     .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
     .tbl-model { font-family: monospace; font-weight: 600; }
     .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
-    .tbl-no-photo { width: 22px; height: 22px; display: block; opacity: 0.25; margin: 0 auto; }
     .tbl-pack-sel {
       height: 30px; border: 1.5px solid #d1d5db; border-radius: 6px;
       background: #f9fafb; color: #111827; font-size: 12px;
@@ -433,10 +411,7 @@
     .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
     .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
     @media (max-width: 480px) {
-      .tbl-col-photo { width: 30px; padding: 5px 3px !important; }
-      .tbl-col-photo.tbl-center { text-align: center; }
-      .tbl-thumb { width: 22px; height: 22px; border-radius: 4px; }
-      .tbl-col-photo thead th { font-size: 8px; padding: 9px 3px !important; }
+      .tbl-col-photo { display: none; }
     }
 
     /* ── КАМЕРА ── */
@@ -503,37 +478,91 @@
       padding: 0 20px;
     }
 
-
-
-    /* ── SCANBOT ── */
-    #scanbotOverlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      z-index: 99999;
-      background: black;
-      display: none;
-      flex-direction: column;
+    /* ── Ряд кнопок сканера ── */
+    .scan-btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: clamp(8px, 2vw, 14px);
     }
-    #scanbotOverlay.active { display: flex; }
-    #scanbotContainer {
-      width: 100%;
-      flex: 1;
-      min-height: 0;
-      position: relative;
-    }
-    #scanbotControls {
-      position: absolute;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
-      left: 0; right: 0;
-      display: none;
+    .scan-btn-row .btn { margin-top: 0; flex: 1; min-width: 0; }
+    .btn-scan-cfg {
+      width: clamp(48px, 12vw, 64px);
+      flex-shrink: 0;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: clamp(8px, 2vw, 24px);
+      font-size: clamp(18px, 5vw, 28px);
+      cursor: pointer;
+      color: #6b7280;
+      display: flex;
       align-items: center;
       justify-content: center;
-      gap: 20px;
-      z-index: 100001;
-      padding: 0 20px;
     }
-    #scanbotControls.visible { display: flex; }
-    .scanbot-ctrl-btn {
+    .btn-scan-cfg:active { background: #e5e7eb; }
+
+    /* ── Настройки сканера (оверлей) ── */
+    .scanner-cfg-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100001;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .scanner-cfg-overlay.active { display: flex; }
+    .scanner-cfg-panel {
+      background: white;
+      width: 100%;
+      max-width: min(600px, 100vw);
+      max-height: 92dvh;
+      border-radius: 20px 20px 0 0;
+      padding: clamp(16px, 4vw, 28px);
+      padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .fmt-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 6px 10px;
+    }
+    .fmt-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: clamp(12px, 3.2vw, 14px);
+      color: #374151;
+      cursor: pointer;
+    }
+    .fmt-item input { width: 18px; height: 18px; accent-color: #15803d; cursor: pointer; flex-shrink: 0; }
+    .scanner-cfg-note {
+      background: #fef3c7;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #92400e;
+      margin-bottom: 14px;
+    }
+
+    /* ── Камера: доп-элементы ── */
+    .camera-mode-label {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      left: 16px;
+      z-index: 2;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .torch-btn {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: 76px;
+      z-index: 2;
       width: 52px; height: 52px;
       border-radius: 50%;
       border: 2px solid rgba(255,255,255,0.4);
@@ -541,32 +570,12 @@
       color: white;
       font-size: 22px;
       cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .scanbot-ctrl-btn.active-torch {
-      background: rgba(255, 200, 0, 0.5);
-      border-color: rgba(255,200,0,0.8);
-    }
-    #scanbotZoomControls {
-      display: flex;
+      display: none;
       align-items: center;
-      gap: 10px;
-      background: rgba(0,0,0,0.5);
-      border-radius: 28px;
-      padding: 6px 14px;
-      border: 2px solid rgba(255,255,255,0.3);
+      justify-content: center;
     }
-    #scanbotZoomControls button {
-      background: none; border: none; color: white;
-      font-size: 26px; line-height: 1; cursor: pointer;
-      width: 32px; height: 32px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    #scanbotZoomLevel {
-      color: white; font-size: 15px; font-weight: 600;
-      min-width: 32px; text-align: center;
-    }
+    .torch-btn.visible { display: flex; }
+    .torch-btn.on { background: rgba(255,200,0,0.6); }
 
     /* Утилиты */
     .hidden { display: none; }
@@ -576,8 +585,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v122</h1>
-    <button class="refresh-btn" id="refreshBtn" onclick="refreshData()" title="Обновить данные">↻</button>
+    <h1 id="pageTitle">📦 Сканер упаковки v121</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -603,9 +611,18 @@
     <p class="barcode-label">Введите штрих-код или номер модели</p>
     <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn btn-primary" onclick="onSearch()">Найти</button>
-    <button class="btn btn-secondary" onclick="openCamera()">📷 Сканировать камерой</button>
-    <button class="btn btn-secondary" onclick="openScanbot()">📷 Расширенный сканер</button>
-    <button class="btn btn-secondary" onclick="openScanbotSDK()">📱 Сканировать Scanbot</button>
+    <div class="scan-btn-row">
+      <button class="btn-scan-cfg" onclick="openScannerCfg('basic')" title="Настройки">⚙️</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('basic')">📷 Сканировать камерой</button>
+    </div>
+    <div class="scan-btn-row">
+      <button class="btn-scan-cfg" onclick="openScannerCfg('advanced')" title="Настройки">⚙️</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('advanced')">🔬 Расширенный сканер</button>
+    </div>
+    <div class="scan-btn-row">
+      <button class="btn-scan-cfg" onclick="openScannerCfg('scanbot')" title="Настройки">⚙️</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('scanbot')">📱 Сканировать ScanBot</button>
+    </div>
     <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
   </div>
 
@@ -635,13 +652,10 @@
     <p class="select-label">Выберите тип упаковки</p>
     <p class="select-model" id="selectModel"></p>
     <div id="packButtons">
-      <button class="pack-btn" onclick="selectPack(this,'3см коробка S (3x28x19.5)')">3см коробка S (3x28x19.5)</button>
-      <button class="pack-btn" onclick="selectPack(this,'5см коробка M (5x28x19.5) пакет S')">5см коробка M (5x28x19.5) пакет S</button>
-      <button class="pack-btn" onclick="selectPack(this,'5см коробка M (5x28x19.5) пакет L')">5см коробка M (5x28x19.5) пакет L</button>
-      <button class="pack-btn" onclick="selectPack(this,'пакет S 30x20см')">пакет S 30x20см</button>
-      <button class="pack-btn" onclick="selectPack(this,'пакет L 60x30см')">пакет L 60x30см</button>
       <button class="pack-btn" onclick="selectPack(this,'коробка мелкая старая пробная')">коробка мелкая старая пробная</button>
-      <button class="pack-btn" onclick="selectPack(this,'тест')">тест</button>
+      <button class="pack-btn" onclick="selectPack(this,'коробка S 28x19.5x30')">коробка S 28x19.5x30</button>
+      <button class="pack-btn" onclick="selectPack(this,'пакет S 30x20')">пакет S 30x20</button>
+      <button class="pack-btn" onclick="selectPack(this,'пакет L 60x30')">пакет L 60x30</button>
     </div>
     <button class="btn btn-primary" id="btnSavePack" onclick="onSave()" style="margin-top:16px;opacity:0.4;pointer-events:none">Сохранить</button>
     <button class="btn btn-secondary" onclick="goIdle()">Отмена</button>
@@ -853,53 +867,20 @@ document.getElementById('barcodeInput').addEventListener('keydown', function(e) 
  * Загружаем все штрих-коды, модели и статусы упаковки в память.
  * После этого поиск работает локально — мгновенно!
  */
-const CACHE_KEY = '_barcodeCache';
-
 function preloadAllData() {
-  // Есть кеш — показываем сразу, в фоне тихо обновляем
-  var cached = localStorage.getItem(CACHE_KEY);
-  if (cached) {
-    try {
-      barcodeToModel = JSON.parse(cached);
-      dataLoaded = true;
-      document.getElementById('barcodeInput').focus();
-      fetchFreshData(false); // фоновое обновление
-      return;
-    } catch(e) {}
-  }
-  // Нет кеша — показываем прелоадер и ждём
-  fetchFreshData(true);
-}
-
-function fetchFreshData(showLoading) {
-  if (showLoading) showPreloader(true);
-  apiCall('getAllBarcodes').then(function(result) {
-    if (showLoading) showPreloader(false);
-    if (result.error) {
-      if (showLoading) { dataLoadError = result.error; showError('Ошибка загрузки: ' + result.error); }
-    } else {
-      barcodeToModel = result.barcodes || {};
-      dataLoaded = true;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(barcodeToModel)); } catch(e) {}
-      if (showLoading) document.getElementById('barcodeInput').focus();
-    }
-  });
-}
-
-function refreshData() {
-  var btn = document.getElementById('refreshBtn');
-  if (btn) btn.classList.add('spinning');
-  apiCall('getAllBarcodes').then(function(result) {
-    if (btn) btn.classList.remove('spinning');
-    if (result.error) {
-      showError('Ошибка обновления: ' + result.error);
-      startErrorTimer();
-    } else {
-      barcodeToModel = result.barcodes || {};
-      dataLoaded = true;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(barcodeToModel)); } catch(e) {}
-    }
-  });
+  showPreloader(true);
+  apiCall('getAllBarcodes')
+    .then(function(result) {
+      showPreloader(false);
+      if (result.error) {
+        dataLoadError = result.error;
+        showError('Ошибка загрузки: ' + result.error);
+      } else {
+        barcodeToModel = result.barcodes || {};
+        dataLoaded = true;
+        document.getElementById('barcodeInput').focus();
+      }
+    });
 }
 
 function showPreloader(show) {
@@ -1136,24 +1117,19 @@ function showError(msg) {
 // ── Таблица всех изделий ──
 var tableActiveType = '';
 var tableChangedModels = new Set();
-var TABLE_PACK_TYPES = ['3см коробка S (3x28x19.5)','5см коробка M (5x28x19.5) пакет S','5см коробка M (5x28x19.5) пакет L','пакет S 30x20см','пакет L 60x30см','коробка мелкая старая пробная','тест'];
+var TABLE_PACK_TYPES = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
 
 function openTableView() {
-  document.getElementById('tableView').classList.add('active');
-  document.getElementById('tableView').scrollTop = 0;
+  var view = document.getElementById('tableView');
+  view.scrollTop = 0;
   document.getElementById('tblSearch').value = '';
-  document.getElementById('tblBody').innerHTML = '';
-  document.getElementById('tblEmpty').style.display = 'none';
-  document.getElementById('tblLoading').style.display = '';
-  buildTypeTabs();
-  // Откладываем рендер чтобы не блокировать CSS-анимацию открытия
+  view.classList.add('active'); // запускаем анимацию
+  // Ждём первый кадр (анимация пошла), потом тяжёлый рендер
   requestAnimationFrame(function() {
-    requestAnimationFrame(function() {
-      renderTableView();
-      document.getElementById('tblLoading').style.display = 'none';
-      var h = document.querySelector('.tbl-topbar').offsetHeight;
-      document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
-    });
+    var h = document.querySelector('.tbl-topbar').offsetHeight;
+    document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
+    buildTypeTabs();
+    renderTableView();
   });
 }
 
@@ -1241,8 +1217,8 @@ function renderTableView() {
     var isChanged = tableChangedModels.has(item.model);
     var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
     var photoHtml = item.photoUrl
-      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" style="margin:0 auto" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
-      : '<span style="display:block;text-align:center;font-size:14px;opacity:0.2;line-height:22px">📷</span>';
+      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
+      : '';
     var packOpts = '<option value="">—</option>' + TABLE_PACK_TYPES.map(function(pt) {
       return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
     }).join('');
@@ -1329,9 +1305,179 @@ function esc(str) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-// ── Камера ──
+// ═══════════════════════════════════════════════
+// ── Настройки сканеров (по режимам) ──
+// ═══════════════════════════════════════════════
+
+var SCANNER_CFG_KEY = 'scannerCameraCfg_v1';
+var _scCfgMode = ''; // какой режим сейчас редактируется
+
+// Форматы ZXing (basic/advanced)
+var ZXING_FMTS = [
+  { id: 'EAN_13',       label: 'EAN-13' },
+  { id: 'EAN_8',        label: 'EAN-8' },
+  { id: 'QR_CODE',      label: 'QR Code' },
+  { id: 'DATA_MATRIX',  label: 'DataMatrix' },
+  { id: 'CODE_128',     label: 'Code 128' },
+  { id: 'CODE_39',      label: 'Code 39' },
+  { id: 'CODE_93',      label: 'Code 93' },
+  { id: 'ITF',          label: 'ITF' },
+  { id: 'CODABAR',      label: 'Codabar' },
+  { id: 'PDF_417',      label: 'PDF 417' },
+  { id: 'AZTEC',        label: 'Aztec' },
+  { id: 'UPC_A',        label: 'UPC-A' },
+  { id: 'UPC_E',        label: 'UPC-E' },
+  { id: 'RSS_14',       label: 'RSS-14' },
+  { id: 'RSS_EXPANDED', label: 'RSS Expanded' },
+];
+
+// Форматы BarcodeDetector (scanbot)
+var BD_FMTS = [
+  { id: 'ean_13',      label: 'EAN-13' },
+  { id: 'ean_8',       label: 'EAN-8' },
+  { id: 'qr_code',     label: 'QR Code' },
+  { id: 'data_matrix', label: 'DataMatrix' },
+  { id: 'code_128',    label: 'Code 128' },
+  { id: 'code_39',     label: 'Code 39' },
+  { id: 'code_93',     label: 'Code 93' },
+  { id: 'itf',         label: 'ITF' },
+  { id: 'codabar',     label: 'Codabar' },
+  { id: 'pdf417',      label: 'PDF 417' },
+  { id: 'aztec',       label: 'Aztec' },
+  { id: 'upc_a',       label: 'UPC-A' },
+  { id: 'upc_e',       label: 'UPC-E' },
+];
+
+// Маппинг BD → ZXing (для фоллбэка)
+var BD_TO_ZXING = {
+  ean_13:'EAN_13', ean_8:'EAN_8', qr_code:'QR_CODE', data_matrix:'DATA_MATRIX',
+  code_128:'CODE_128', code_39:'CODE_39', code_93:'CODE_93', itf:'ITF',
+  codabar:'CODABAR', pdf417:'PDF_417', aztec:'AZTEC', upc_a:'UPC_A', upc_e:'UPC_E'
+};
+
+function defaultScCfg() {
+  return {
+    basic: {
+      formats: ['EAN_13','EAN_8','QR_CODE','DATA_MATRIX'],
+      resolution: 720, fps: 30, scanInterval: 300,
+      tryHarder: false, charset: ''
+    },
+    advanced: {
+      formats: ['EAN_13','EAN_8','QR_CODE','DATA_MATRIX','CODE_128','CODE_39','ITF','PDF_417','AZTEC'],
+      resolution: 1080, fps: 30, scanInterval: 150,
+      tryHarder: true, charset: 'UTF-8'
+    },
+    scanbot: {
+      formats: ['ean_13','ean_8','qr_code','data_matrix'],
+      resolution: 1080, fps: 30, scanInterval: 200,
+      tryHarder: false, charset: ''
+    }
+  };
+}
+
+var scCfg = defaultScCfg();
+
+function loadScCfg() {
+  try {
+    var s = localStorage.getItem(SCANNER_CFG_KEY);
+    if (s) {
+      var p = JSON.parse(s);
+      ['basic','advanced','scanbot'].forEach(function(m) {
+        if (p[m]) Object.assign(scCfg[m], p[m]);
+      });
+    }
+  } catch(e) {}
+}
+
+function saveScCfgStorage() {
+  try { localStorage.setItem(SCANNER_CFG_KEY, JSON.stringify(scCfg)); } catch(e) {}
+}
+
+function openScannerCfg(mode) {
+  _scCfgMode = mode;
+  var titles = { basic:'📷 Камера', advanced:'🔬 Расширенный сканер', scanbot:'📱 ScanBot' };
+  document.getElementById('scannerCfgTitle').textContent = 'Настройки: ' + (titles[mode] || mode);
+
+  var isScanbot = mode === 'scanbot';
+  var fmtList = isScanbot ? BD_FMTS : ZXING_FMTS;
+  var c = scCfg[mode];
+
+  // Форматы
+  var grid = document.getElementById('scFmtGrid');
+  grid.innerHTML = fmtList.map(function(f) {
+    var chk = c.formats.indexOf(f.id) >= 0 ? ' checked' : '';
+    return '<label class="fmt-item"><input type="checkbox" value="' + f.id + '"' + chk + '>' + f.label + '</label>';
+  }).join('');
+
+  // Разрешение
+  document.getElementById('scResolution').value = c.resolution;
+
+  // FPS
+  document.getElementById('scFps').value = c.fps;
+  document.getElementById('scFpsVal').textContent = c.fps;
+
+  // Интервал
+  document.getElementById('scInterval').value = c.scanInterval;
+  document.getElementById('scIntervalVal').textContent = c.scanInterval;
+
+  // TRY_HARDER + charset — только для ZXing
+  document.getElementById('scTryHarderGroup').style.display = isScanbot ? 'none' : '';
+  document.getElementById('scCharsetGroup').style.display = isScanbot ? 'none' : '';
+  if (!isScanbot) {
+    document.getElementById('scTryHarder').checked = c.tryHarder;
+    document.getElementById('scCharset').value = c.charset || '';
+  }
+
+  // API-заметка для ScanBot
+  document.getElementById('scApiNote').style.display =
+    (isScanbot && !('BarcodeDetector' in window)) ? '' : 'none';
+
+  document.getElementById('scannerCfgOverlay').classList.add('active');
+}
+
+function closeScannerCfg() {
+  document.getElementById('scannerCfgOverlay').classList.remove('active');
+}
+
+function saveScannerCfg() {
+  var m = _scCfgMode;
+  if (!m) return;
+
+  var fmts = [];
+  document.querySelectorAll('#scFmtGrid input[type=checkbox]:checked').forEach(function(cb) {
+    fmts.push(cb.value);
+  });
+
+  scCfg[m] = {
+    formats: fmts,
+    resolution: parseInt(document.getElementById('scResolution').value),
+    fps: parseInt(document.getElementById('scFps').value),
+    scanInterval: parseInt(document.getElementById('scInterval').value),
+    tryHarder: document.getElementById('scTryHarder').checked,
+    charset: (document.getElementById('scCharset').value || '')
+  };
+
+  saveScCfgStorage();
+  closeScannerCfg();
+}
+
+function resetScannerCfg() {
+  var m = _scCfgMode;
+  if (!m) return;
+  scCfg[m] = defaultScCfg()[m];
+  saveScCfgStorage();
+  openScannerCfg(m); // перерисовка
+}
+
+// ═══════════════════════════════════════════════
+// ── Камера / сканеры ──
+// ═══════════════════════════════════════════════
+
 var codeReader = null;
 var zxingLoaded = false;
+var _scanBotTimer = null;
+var _currentTrack = null;
+var _activeScanMode = '';
 
 function loadZXing() {
   return new Promise(function(resolve, reject) {
@@ -1344,30 +1490,74 @@ function loadZXing() {
   });
 }
 
-function openCamera() {
+function resToWidth(h) {
+  if (h >= 1920) return 3840;
+  if (h >= 1080) return 1920;
+  if (h >= 720) return 1280;
+  return 640;
+}
+
+// Общая точка входа — открывает камеру в нужном режиме
+function openCameraMode(mode) {
+  _activeScanMode = mode;
+  var labels = { basic:'Камера', advanced:'Расширенный', scanbot:'ScanBot' };
+  document.getElementById('cameraModeLabel').textContent = labels[mode] || mode;
+
+  var c = scCfg[mode];
+
+  // Форма рамки: квадрат если есть 2D-форматы
+  var zone = document.getElementById('scanZone');
+  var has2D = c.formats.some(function(f) {
+    return /QR|qr|MATRIX|matrix|AZTEC|aztec|PDF|pdf/i.test(f);
+  });
+  if (has2D) {
+    zone.style.width = 'min(70vw, 300px)';
+    zone.style.height = 'min(70vw, 300px)';
+  } else {
+    zone.style.width = 'min(80vw, 360px)';
+    zone.style.height = 'min(28vw, 120px)';
+  }
+
   document.getElementById('cameraOverlay').classList.add('active');
+
+  if (mode === 'scanbot') {
+    startScanBot(c);
+  } else {
+    startZxing(c);
+  }
+}
+
+// ── ZXing-движок (basic / advanced) ──
+function startZxing(c) {
   loadZXing()
     .then(function() {
       var hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.ITF,
-      ]);
+
+      var fmts = c.formats.map(function(f) { return ZXing.BarcodeFormat[f]; }).filter(Boolean);
+      if (fmts.length) hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, fmts);
+      if (c.tryHarder) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      if (c.charset) hints.set(ZXing.DecodeHintType.CHARACTER_SET, c.charset);
+
       codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      codeReader.timeBetweenDecodingAttempts = c.scanInterval || 300;
+
       return codeReader.decodeFromConstraints(
-        { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
-        document.getElementById('cameraVideo'),
-        function(result, err) {
-          if (result) {
-            closeCamera();
-            document.getElementById('barcodeInput').value = result.getText();
-            onSearch();
+        {
+          video: {
+            facingMode: 'environment',
+            width:     { ideal: resToWidth(c.resolution) },
+            height:    { ideal: c.resolution },
+            frameRate: { ideal: c.fps || 30 }
           }
+        },
+        document.getElementById('cameraVideo'),
+        function(result) {
+          if (result) onScanResult(result.getText());
         }
       );
+    })
+    .then(function() {
+      grabTrackAndCheckTorch();
     })
     .catch(function(e) {
       closeCamera();
@@ -1376,147 +1566,120 @@ function openCamera() {
     });
 }
 
-function closeCamera() {
-  document.getElementById('cameraOverlay').classList.remove('active');
-  if (codeReader) {
-    try { codeReader.reset(); } catch(e) {}
-    codeReader = null;
-  }
-}
+// ── ScanBot-движок (BarcodeDetector API, фоллбэк → ZXing) ──
+function startScanBot(c) {
+  var useBD = 'BarcodeDetector' in window;
 
-// ── Scanbot (ZXing, все форматы 1D+2D, zoom и фонарик) ──
-var scanbotReader = null;
-var scanbotVideoTrack = null;
-var scanbotTorchOn = false;
-var scanbotZoomVal = 1;
-
-function openScanbot() {
-  document.getElementById('scanbotOverlay').classList.add('active');
-  document.getElementById('scanbotControls').classList.remove('visible');
-  scanbotTorchOn = false;
-  scanbotZoomVal = 1;
-  scanbotVideoTrack = null;
-
-  var container = document.getElementById('scanbotContainer');
-  container.innerHTML = '';
-  var video = document.createElement('video');
-  video.autoplay = true; video.muted = true;
-  video.setAttribute('playsinline', 'true');
-  video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover';
-  container.appendChild(video);
-
-  loadZXing().then(function() {
-    var hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.UPC_A,  ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.CODE_93,  ZXing.BarcodeFormat.CODABAR,
-      ZXing.BarcodeFormat.ITF,      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.AZTEC,
-      ZXing.BarcodeFormat.PDF_417,
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    scanbotReader = new ZXing.BrowserMultiFormatReader(hints);
-    return scanbotReader.decodeFromConstraints(
-      { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
-      video,
-      function(result) {
-        if (result) {
-          closeScanbot();
-          document.getElementById('barcodeInput').value = result.getText();
-          onSearch();
-        }
-      }
-    );
-  }).then(function() {
-    // Получаем видеотрек для зума и фонарика
-    setTimeout(function() {
-      if (video.srcObject) {
-        var tracks = video.srcObject.getVideoTracks();
-        if (tracks.length > 0) { scanbotVideoTrack = tracks[0]; showScanbotControls(); }
-      }
-    }, 800);
-  }).catch(function(e) {
-    closeScanbot();
-    showError('Камера недоступна: ' + (e.message || e));
-    startErrorTimer();
-  });
-}
-
-function showScanbotControls() {
-  if (!scanbotVideoTrack) return;
-  var caps = scanbotVideoTrack.getCapabilities ? scanbotVideoTrack.getCapabilities() : {};
-  var hasTorch = !!caps.torch;
-  var hasZoom  = !!caps.zoom;
-  document.getElementById('scanbotTorchBtn').style.display = hasTorch ? 'flex' : 'none';
-  document.getElementById('scanbotZoomControls').style.display = hasZoom ? 'flex' : 'none';
-  if (hasZoom) {
-    scanbotZoomVal = (scanbotVideoTrack.getSettings().zoom) || caps.zoom.min || 1;
-    document.getElementById('scanbotZoomLevel').textContent = scanbotZoomVal.toFixed(1) + '×';
-  }
-  if (hasTorch || hasZoom) document.getElementById('scanbotControls').classList.add('visible');
-}
-
-function toggleScanbotTorch() {
-  if (!scanbotVideoTrack) return;
-  scanbotTorchOn = !scanbotTorchOn;
-  scanbotVideoTrack.applyConstraints({ advanced: [{ torch: scanbotTorchOn }] }).catch(function(){});
-  document.getElementById('scanbotTorchBtn').classList.toggle('active-torch', scanbotTorchOn);
-}
-
-function scanbotZoom(dir) {
-  if (!scanbotVideoTrack) return;
-  var caps = scanbotVideoTrack.getCapabilities ? scanbotVideoTrack.getCapabilities() : {};
-  if (!caps.zoom) return;
-  var step = Math.max(0.1, (caps.zoom.max - caps.zoom.min) / 10);
-  scanbotZoomVal = Math.min(caps.zoom.max, Math.max(caps.zoom.min, scanbotZoomVal + dir * step));
-  scanbotVideoTrack.applyConstraints({ advanced: [{ zoom: scanbotZoomVal }] }).catch(function(){});
-  document.getElementById('scanbotZoomLevel').textContent = scanbotZoomVal.toFixed(1) + '×';
-}
-
-function closeScanbot() {
-  document.getElementById('scanbotOverlay').classList.remove('active');
-  document.getElementById('scanbotControls').classList.remove('visible');
-  if (scanbotTorchOn && scanbotVideoTrack) {
-    scanbotVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(function(){});
-  }
-  scanbotTorchOn = false; scanbotVideoTrack = null;
-  if (scanbotReader) { try { scanbotReader.reset(); } catch(e) {} scanbotReader = null; }
-}
-
-
-// ── Scanbot SDK (UI2 API) ──
-var scanbotSdkInstance = null;
-
-async function openScanbotSDK() {
-  if (typeof ScanbotSDK === 'undefined') {
-    showError('Scanbot SDK ещё загружается. Подождите и попробуйте снова.');
-    startErrorTimer();
+  if (!useBD) {
+    // Фоллбэк: конвертируем BD-форматы в ZXing и запускаем ZXing
+    var converted = {
+      formats: c.formats.map(function(f) { return BD_TO_ZXING[f]; }).filter(Boolean),
+      resolution: c.resolution,
+      fps: c.fps,
+      scanInterval: c.scanInterval,
+      tryHarder: false,
+      charset: ''
+    };
+    startZxing(converted);
     return;
   }
 
-  try {
-    if (!scanbotSdkInstance) {
-      scanbotSdkInstance = await ScanbotSDK.initialize({
-        enginePath: 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/bin/complete/',
-        licenseKey: ''
-      });
+  // Нативный BarcodeDetector
+  var video = document.getElementById('cameraVideo');
+  var constraints = {
+    video: {
+      facingMode: 'environment',
+      width:     { ideal: resToWidth(c.resolution) },
+      height:    { ideal: c.resolution },
+      frameRate: { ideal: c.fps || 30 }
     }
+  };
 
-    var config = new ScanbotSDK.UI.Config.BarcodeScannerScreenConfiguration();
-    var result = await ScanbotSDK.UI.createBarcodeScanner(config);
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(function(stream) {
+      video.srcObject = stream;
+      _currentTrack = stream.getVideoTracks()[0];
+      checkTorchCapability();
 
-    if (result && result.items && result.items.length > 0) {
-      var barcode = result.items[0].barcode;
-      document.getElementById('barcodeInput').value = barcode.text;
-      onSearch();
+      var bdFmts = c.formats.length ? c.formats : ['ean_13','qr_code','data_matrix'];
+      var detector = new BarcodeDetector({ formats: bdFmts });
+
+      _scanBotTimer = setInterval(function() {
+        if (video.readyState < 2) return;
+        detector.detect(video)
+          .then(function(codes) {
+            if (codes.length > 0) onScanResult(codes[0].rawValue);
+          })
+          .catch(function() {});
+      }, c.scanInterval || 200);
+    })
+    .catch(function(e) {
+      closeCamera();
+      showError('Камера недоступна: ' + (e.message || e));
+      startErrorTimer();
+    });
+}
+
+function onScanResult(text) {
+  if (!text) return;
+  closeCamera();
+  document.getElementById('barcodeInput').value = text;
+  onSearch();
+}
+
+function closeCamera() {
+  document.getElementById('cameraOverlay').classList.remove('active');
+
+  // Останавливаем ScanBot-таймер
+  if (_scanBotTimer) { clearInterval(_scanBotTimer); _scanBotTimer = null; }
+
+  // Останавливаем ZXing (он сам выключает стрим)
+  if (codeReader) {
+    try { codeReader.reset(); } catch(e) {}
+    codeReader = null;
+  } else {
+    // Если нет ZXing — стрим надо закрыть вручную
+    var video = document.getElementById('cameraVideo');
+    if (video && video.srcObject) {
+      video.srcObject.getTracks().forEach(function(t) { t.stop(); });
+      video.srcObject = null;
     }
-  } catch (err) {
-    console.error('[Scanbot SDK]', err);
-    showError('Scanbot: ' + (err.message || err));
-    startErrorTimer();
   }
+
+  _currentTrack = null;
+
+  // Прячем и сбрасываем фонарик
+  var tb = document.getElementById('torchBtn');
+  if (tb) { tb.classList.remove('visible','on'); }
+}
+
+// ── Фонарик (torch) ──
+function grabTrackAndCheckTorch() {
+  var video = document.getElementById('cameraVideo');
+  if (video && video.srcObject) {
+    _currentTrack = video.srcObject.getVideoTracks()[0];
+  }
+  checkTorchCapability();
+}
+
+function checkTorchCapability() {
+  var tb = document.getElementById('torchBtn');
+  if (!_currentTrack || !tb) return;
+  try {
+    var caps = _currentTrack.getCapabilities();
+    if (caps && caps.torch) tb.classList.add('visible');
+  } catch(e) {}
+}
+
+function toggleTorch() {
+  if (!_currentTrack) return;
+  var tb = document.getElementById('torchBtn');
+  var isOn = tb.classList.contains('on');
+  try {
+    _currentTrack.applyConstraints({ advanced: [{ torch: !isOn }] })
+      .then(function() { tb.classList.toggle('on'); })
+      .catch(function() {});
+  } catch(e) {}
 }
 
 // ── Полноэкранное фото ──
@@ -1544,6 +1707,7 @@ function closePhotoFullscreen() {
 window.onload = function() {
   initTableEvents();
   loadSettings();
+  loadScCfg();
   preloadAllData();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
@@ -1594,7 +1758,7 @@ window.onload = function() {
 
     <div class="settings-preview-box">
       <div class="settings-preview-label">Предпросмотр</div>
-      <div id="settingsPreview" style="line-height:1.2">3см коробка S (3x28x19.5)</div>
+      <div id="settingsPreview" style="line-height:1.2">коробка S 28x19.5x30</div>
     </div>
 
     <div class="settings-group">
@@ -1614,6 +1778,70 @@ window.onload = function() {
 
     <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
     <button class="btn btn-secondary" onclick="closeSettings()" style="margin-top:10px">Отмена</button>
+  </div>
+</div>
+
+<!-- Настройки сканера -->
+<div id="scannerCfgOverlay" class="scanner-cfg-overlay" onclick="if(event.target===this)closeScannerCfg()">
+  <div class="scanner-cfg-panel">
+    <div class="settings-header">
+      <span class="settings-title" id="scannerCfgTitle">Настройки сканера</span>
+      <button class="settings-close-btn" onclick="closeScannerCfg()">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Форматы штрих-кодов</div>
+      <div class="fmt-grid" id="scFmtGrid"></div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Разрешение камеры</div>
+      <select id="scResolution" class="settings-select">
+        <option value="480">480p (быстро)</option>
+        <option value="720">720p (баланс)</option>
+        <option value="1080">1080p (качество)</option>
+        <option value="1920">4K (максимум)</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Частота кадров: <b id="scFpsVal">30</b> fps</div>
+      <input type="range" id="scFps" class="settings-range" min="10" max="60" step="5" value="30"
+        oninput="document.getElementById('scFpsVal').textContent=this.value">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Интервал сканирования: <b id="scIntervalVal">300</b> мс</div>
+      <input type="range" id="scInterval" class="settings-range" min="50" max="2000" step="50" value="300"
+        oninput="document.getElementById('scIntervalVal').textContent=this.value">
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">Меньше — быстрее обнаружение, больше нагрузка</div>
+    </div>
+
+    <div class="settings-group" id="scTryHarderGroup">
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="scTryHarder">
+        TRY_HARDER (тщательное сканирование)
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">Медленнее, но лучше распознаёт повреждённые штрих-коды</div>
+    </div>
+
+    <div class="settings-group" id="scCharsetGroup">
+      <div class="settings-label">Кодировка</div>
+      <select id="scCharset" class="settings-select">
+        <option value="">Авто</option>
+        <option value="UTF-8">UTF-8</option>
+        <option value="ISO-8859-1">ISO-8859-1</option>
+        <option value="Shift_JIS">Shift_JIS</option>
+      </select>
+    </div>
+
+    <div id="scApiNote" class="scanner-cfg-note" style="display:none">
+      ⚠️ BarcodeDetector API недоступна в этом браузере. Будет использован запасной движок ZXing.
+    </div>
+
+    <button class="btn btn-primary" onclick="saveScannerCfg()">Сохранить</button>
+    <button class="btn btn-secondary" onclick="closeScannerCfg()" style="margin-top:10px">Отмена</button>
+    <button class="btn btn-secondary" onclick="resetScannerCfg()" style="margin-top:6px;font-size:14px;color:#9ca3af">Сбросить по умолчанию</button>
   </div>
 </div>
 
@@ -1639,34 +1867,19 @@ window.onload = function() {
         </tr>
       </thead>
       <tbody id="tblBody"></tbody>
-  </table>
-  <div id="tblLoading" class="tbl-loading"><div class="tbl-spinner"></div></div>
     </table>
     <div id="tblEmpty" class="tbl-empty" style="display:none">Нет данных</div>
   </div>
 </div>
 
-
-<!-- Scanbot -->
-<div id="scanbotOverlay">
-  <div id="scanbotContainer"></div>
-  <div id="scanbotControls">
-    <div id="scanbotZoomControls">
-      <button onclick="scanbotZoom(-1)">−</button>
-      <span id="scanbotZoomLevel">1×</span>
-      <button onclick="scanbotZoom(1)">+</button>
-    </div>
-    <button id="scanbotTorchBtn" class="scanbot-ctrl-btn" onclick="toggleScanbotTorch()">🔦</button>
-  </div>
-  <button class="camera-close-btn" onclick="closeScanbot()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:100001">✕</button>
-</div>
-
 <!-- Камера -->
 <div id="cameraOverlay" class="camera-overlay">
   <video id="cameraVideo" autoplay muted playsinline></video>
-  <div class="scan-zone">
+  <div class="scan-zone" id="scanZone">
     <div class="scan-line"></div>
   </div>
+  <span class="camera-mode-label" id="cameraModeLabel"></span>
+  <button class="torch-btn" id="torchBtn" onclick="toggleTorch()">🔦</button>
   <button class="camera-close-btn" onclick="closeCamera()">✕</button>
   <div class="camera-hint">Наведите штрих-код в рамку</div>
 </div>
