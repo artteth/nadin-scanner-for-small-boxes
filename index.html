@@ -9,8 +9,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v109</title>
+  <title>Сканер упаковки v121</title>
   <style>
+    :root {
+      --pack-font-size: 56px;
+      --pack-font-family: Arial, sans-serif;
+      --pack-color: #15803d;
+      --pack-font-weight: 700;
+      --photo-max-height: 300px;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html {
       height: 100%;
@@ -51,13 +58,31 @@
       box-sizing: border-box;
     }
 
+    .card-header {
+      position: relative;
+      margin: 0 0 clamp(12px, 3vw, 24px);
+    }
     h1 {
       font-size: clamp(24px, 6vw, 48px);
       font-weight: 700;
       color: #111827;
-      margin: 0 0 clamp(12px, 3vw, 24px);
+      margin: 0;
       text-align: center;
       line-height: 1.2;
+      padding-right: clamp(28px, 7vw, 44px);
+    }
+    .settings-btn {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      font-size: clamp(20px, 5vw, 32px);
+      cursor: pointer;
+      padding: 2px 4px;
+      color: #9ca3af;
+      line-height: 1;
     }
 
     /* ── IDLE состояние ── */
@@ -103,12 +128,12 @@
     .packed-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
     .packed-icon-small { font-size: 24px; }
     .packed-title-inline { font-size: 20px; font-weight: 700; color: #15803d; }
-    .packed-photo { text-align: center; margin: 10px 0 0; }
-    .packed-photo img { max-width: 100%; max-height: 250px; border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .packed-photo { text-align: center; margin: 4px 0 0; }
+    .packed-photo img { max-width: 100%; max-height: var(--photo-max-height); border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
     .packed-title { font-size: 20px; font-weight: 700; color: #15803d; text-align: center; margin-bottom: 6px; }
     .packed-barcode { font-size: 20px; color: #111827; text-align: center; font-weight: 700; margin-bottom: 4px; font-family: monospace; }
-    .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 4px; font-family: monospace; }
-    .packed-type { font-size: 28px; color: #15803d; text-align: center; font-weight: 700; margin-bottom: 24px; line-height: 1.2; }
+    .packed-model { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 2px; font-family: monospace; }
+    .packed-type { font-size: var(--pack-font-size); font-family: var(--pack-font-family); color: var(--pack-color); font-weight: var(--pack-font-weight); text-align: center; margin-bottom: 8px; line-height: 1.2; }
 
     .btn-ok { background: #15803d; color: white; font-size: 20px; position: relative; }
     .btn-ok:active { background: #166534; }
@@ -185,7 +210,7 @@
     .scan-barcode { font-size: 18px; color: #111827; margin-bottom: 4px; font-family: monospace; font-weight: 700; }
     .scan-model { font-size: 18px; font-weight: 700; color: #111827; font-family: monospace; margin-bottom: 8px; }
     .scan-photo { text-align: center; margin: 12px 0 0; }
-    .scan-photo img { max-width: 100%; max-height: 300px; border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
+    .scan-photo img { max-width: 100%; max-height: var(--photo-max-height); border-radius: 12px; object-fit: contain; box-shadow: 0 2px 12px rgba(0,0,0,0.08); cursor: pointer; }
     .no-photo { color: #9ca3af; font-size: 14px; font-style: italic; margin: 12px 0; }
 
     /* Полноэкранное фото */
@@ -212,6 +237,346 @@
       object-fit: contain;
     }
 
+    /* ── НАСТРОЙКИ ── */
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99997;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .settings-overlay.active { display: flex; }
+    .settings-panel {
+      background: white;
+      width: 100%;
+      max-width: min(600px, 100vw);
+      max-height: 88dvh;
+      border-radius: 20px 20px 0 0;
+      padding: clamp(16px, 4vw, 28px);
+      padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .settings-title { font-size: clamp(18px, 5vw, 24px); font-weight: 700; color: #111827; }
+    .settings-close-btn {
+      background: #f3f4f6; border: none;
+      width: 36px; height: 36px; border-radius: 50%;
+      font-size: 18px; cursor: pointer; color: #374151;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .settings-group { margin-bottom: 18px; }
+    .settings-label { font-size: clamp(13px, 3.5vw, 15px); color: #374151; margin-bottom: 8px; font-weight: 600; }
+    .settings-select {
+      width: 100%; height: 48px; font-size: 16px;
+      border: 2px solid #d1d5db; border-radius: 10px;
+      padding: 0 12px; color: #111827; background: #f9fafb; outline: none;
+    }
+    .settings-select:focus { border-color: #15803d; }
+    .settings-range { width: 100%; accent-color: #15803d; cursor: pointer; margin-top: 4px; }
+    .settings-color {
+      width: 64px; height: 48px;
+      border: 2px solid #d1d5db; border-radius: 10px;
+      cursor: pointer; padding: 4px; background: white;
+    }
+    .settings-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: clamp(14px, 4vw, 17px);
+      color: #374151;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-checkbox-label input[type=checkbox] {
+      width: 22px; height: 22px;
+      accent-color: #15803d;
+      cursor: pointer;
+    }
+    .settings-preview-box {
+      background: #f8fafc; border-radius: 12px;
+      padding: 12px 16px; text-align: center; margin-bottom: 16px;
+    }
+    .settings-preview-label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+
+    /* ── ТАБЛИЦА ИЗДЕЛИЙ ── */
+    .table-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50000;
+      background: #f0f4f8;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .table-overlay.active { transform: translateY(0); }
+    .tbl-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1e293b;
+      color: white;
+      padding: 12px 16px;
+      padding-top: max(12px, env(safe-area-inset-top));
+    }
+    .tbl-back-btn {
+      background: rgba(255,255,255,0.15);
+      border: none; color: white;
+      padding: 7px 12px; border-radius: 8px;
+      font-size: clamp(13px, 3.5vw, 15px);
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    .tbl-back-btn:active { background: rgba(255,255,255,0.3); }
+    .tbl-title { flex: 1; font-size: clamp(14px, 4vw, 17px); font-weight: 600; text-align: center; }
+    .tbl-stats { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.75); white-space: nowrap; flex-shrink: 0; }
+    .tbl-tabs-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .tbl-tab {
+      height: 34px; padding: 0 14px;
+      border-radius: 17px;
+      border: 1.5px solid #d1d5db;
+      background: white;
+      font-size: clamp(12px, 3.5vw, 14px); font-weight: 600;
+      color: #374151; cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tbl-tab.active { background: #15803d; color: white; border-color: #15803d; }
+    .tbl-search-wrap {
+      padding: 8px 12px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .tbl-search-wrap input {
+      width: 100%; height: 40px;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      padding: 0 14px; font-size: clamp(14px, 3.5vw, 16px);
+      color: #111827; background: #f9fafb; outline: none;
+    }
+    .tbl-search-wrap input:focus { border-color: #15803d; }
+    .tbl-scroll {
+      /* no overflow-x — иначе sticky thead ломается */
+    }
+    .tbl-table { width: 100%; border-collapse: collapse; }
+    .tbl-table thead th {
+      background: #1e293b; color: white;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 9px 10px; text-align: left;
+      position: sticky;
+      top: var(--tbl-topbar-h, 48px);
+      z-index: 5;
+      white-space: nowrap;
+    }
+    .tbl-table thead th.tbl-center { text-align: center; }
+    .tbl-table tbody tr { border-bottom: 1px solid #f3f4f6; background: white; transition: background 0.1s; }
+    .tbl-table tbody tr:last-child { border-bottom: none; }
+    .tbl-table tbody tr:hover { background: #f9fafb; }
+    .tbl-table tbody tr.is-packed { background: #f0fdf4; }
+    .tbl-table tbody tr.is-packed:hover { background: #dcfce7; }
+    .tbl-table tbody tr.tbl-changed { background: #fefce8; }
+    .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
+    .tbl-model { font-family: monospace; font-weight: 600; }
+    .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
+    .tbl-pack-sel {
+      height: 30px; border: 1.5px solid #d1d5db; border-radius: 6px;
+      background: #f9fafb; color: #111827; font-size: 12px;
+      padding: 0 6px; cursor: pointer; max-width: 170px; width: 100%;
+    }
+    .tbl-pack-sel:focus { outline: none; border-color: #15803d; }
+    .tbl-save-btn {
+      height: 28px; padding: 0 10px; font-size: 12px;
+      border: 1.5px solid #15803d; border-radius: 6px;
+      background: #15803d; color: white; cursor: pointer; white-space: nowrap;
+    }
+    .tbl-save-btn:active { background: #166534; }
+    .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
+    .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
+    @media (max-width: 480px) {
+      .tbl-col-photo { display: none; }
+    }
+
+    /* ── КАМЕРА ── */
+    .camera-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99998;
+      background: black;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .camera-overlay.active { display: flex; }
+    #cameraVideo {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .scan-zone {
+      position: relative;
+      z-index: 1;
+      width: min(80vw, 360px);
+      height: min(28vw, 120px);
+      border: 3px solid #15803d;
+      border-radius: 14px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+      overflow: hidden;
+    }
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #15803d, transparent);
+      animation: scanMove 2s ease-in-out infinite;
+      top: 10%;
+    }
+    @keyframes scanMove {
+      0%, 100% { top: 10%; }
+      50% { top: 85%; }
+    }
+    .camera-close-btn {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: 16px;
+      z-index: 2;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.4);
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .camera-hint {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
+      z-index: 2;
+      color: rgba(255,255,255,0.85);
+      font-size: clamp(14px, 4vw, 18px);
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    /* ── Ряд кнопок сканера ── */
+    .scan-btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: clamp(8px, 2vw, 14px);
+    }
+    .scan-btn-row .btn { margin-top: 0; flex: 1; min-width: 0; }
+    .btn-scan-cfg {
+      width: clamp(48px, 12vw, 64px);
+      flex-shrink: 0;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: clamp(8px, 2vw, 24px);
+      font-size: clamp(18px, 5vw, 28px);
+      cursor: pointer;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-scan-cfg:active { background: #e5e7eb; }
+
+    /* ── Настройки сканера (оверлей) ── */
+    .scanner-cfg-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100001;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .scanner-cfg-overlay.active { display: flex; }
+    .scanner-cfg-panel {
+      background: white;
+      width: 100%;
+      max-width: min(600px, 100vw);
+      max-height: 92dvh;
+      border-radius: 20px 20px 0 0;
+      padding: clamp(16px, 4vw, 28px);
+      padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .fmt-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 6px 10px;
+    }
+    .fmt-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: clamp(12px, 3.2vw, 14px);
+      color: #374151;
+      cursor: pointer;
+    }
+    .fmt-item input { width: 18px; height: 18px; accent-color: #15803d; cursor: pointer; flex-shrink: 0; }
+    .scanner-cfg-note {
+      background: #fef3c7;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #92400e;
+      margin-bottom: 14px;
+    }
+
+    /* ── Камера: доп-элементы ── */
+    .camera-mode-label {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      left: 16px;
+      z-index: 2;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .torch-btn {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: 76px;
+      z-index: 2;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.4);
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .torch-btn.visible { display: flex; }
+    .torch-btn.on { background: rgba(255,200,0,0.6); }
+
     /* Утилиты */
     .hidden { display: none; }
   </style>
@@ -219,7 +584,10 @@
 <body>
 
 <div class="card">
-  <h1 id="pageTitle">📦 Сканер упаковки v109</h1>
+  <div class="card-header">
+    <h1 id="pageTitle">📦 Сканер упаковки v121</h1>
+    <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
+  </div>
 
   <!-- Прелоадер — показывается при загрузке данных -->
   <div id="preloader" class="hidden">
@@ -240,9 +608,22 @@
   </div>
 
   <div id="stateIdle">
-    <p class="barcode-label">Введите или отсканируйте штрих-код</p>
-    <input type="text" id="barcodeInput" placeholder="Штрих-код..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <p class="barcode-label">Введите штрих-код или номер модели</p>
+    <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="btn btn-primary" onclick="onSearch()">Найти</button>
+    <div class="scan-btn-row">
+      <button class="btn-scan-cfg" onclick="openScannerCfg('basic')" title="Настройки">⚙️</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('basic')">📷 Сканировать камерой</button>
+    </div>
+    <div class="scan-btn-row">
+      <button class="btn-scan-cfg" onclick="openScannerCfg('advanced')" title="Настройки">⚙️</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('advanced')">🔬 Расширенный сканер</button>
+    </div>
+    <div class="scan-btn-row">
+      <button class="btn-scan-cfg" onclick="openScannerCfg('scanbot')" title="Настройки">⚙️</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('scanbot')">📱 Сканировать ScanBot</button>
+    </div>
+    <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
   </div>
 
   <!-- ALREADY_PACKED -->
@@ -308,6 +689,108 @@
 </div>
 
 <script>
+// ── Настройки ──
+var settings = {
+  packTypeFontFamily: 'Arial, sans-serif',
+  packTypeFontSize: 56,
+  packTypeColor: '#15803d',
+  packTypeBold: true,
+  photoMaxHeight: 300,
+  timerPacked: 10,
+  timerError: 5,
+};
+var SETTINGS_KEY = 'scannerSettings_v1';
+
+function loadSettings() {
+  try {
+    var saved = localStorage.getItem(SETTINGS_KEY);
+    if (saved) Object.assign(settings, JSON.parse(saved));
+  } catch(e) {}
+  applySettings();
+  syncSettingsUI();
+}
+
+function applySettings() {
+  var r = document.documentElement;
+  r.style.setProperty('--pack-font-size', settings.packTypeFontSize + 'px');
+  r.style.setProperty('--pack-font-family', settings.packTypeFontFamily);
+  r.style.setProperty('--pack-color', settings.packTypeColor);
+  r.style.setProperty('--pack-font-weight', settings.packTypeBold ? '700' : '400');
+  r.style.setProperty('--photo-max-height', settings.photoMaxHeight + 'px');
+}
+
+function syncSettingsUI() {
+  document.getElementById('setFontFamily').value = settings.packTypeFontFamily;
+  document.getElementById('setFontSize').value = settings.packTypeFontSize;
+  document.getElementById('setFontSizeVal').textContent = settings.packTypeFontSize;
+  document.getElementById('setColor').value = settings.packTypeColor;
+  document.getElementById('setBold').checked = settings.packTypeBold;
+  document.getElementById('setPhotoSize').value = settings.photoMaxHeight;
+  document.getElementById('setPhotoSizeVal').textContent = settings.photoMaxHeight;
+  document.getElementById('setTimer1').value = settings.timerPacked;
+  document.getElementById('setTimer1Val').textContent = settings.timerPacked;
+  document.getElementById('setTimer2').value = settings.timerError;
+  document.getElementById('setTimer2Val').textContent = settings.timerError;
+  updateSettingsPreview(settings);
+}
+
+function openSettings() {
+  syncSettingsUI();
+  document.getElementById('settingsOverlay').classList.add('active');
+}
+
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('active');
+  applySettings(); // откатываем незасохранённый предпросмотр
+}
+
+function previewSettings() {
+  var t = readSettingsFromUI();
+  document.getElementById('setFontSizeVal').textContent = t.packTypeFontSize;
+  document.getElementById('setPhotoSizeVal').textContent = t.photoMaxHeight;
+  document.getElementById('setTimer1Val').textContent = t.timerPacked;
+  document.getElementById('setTimer2Val').textContent = t.timerError;
+  var r = document.documentElement;
+  r.style.setProperty('--pack-font-size', t.packTypeFontSize + 'px');
+  r.style.setProperty('--pack-font-family', t.packTypeFontFamily);
+  r.style.setProperty('--pack-color', t.packTypeColor);
+  r.style.setProperty('--pack-font-weight', t.packTypeBold ? '700' : '400');
+  r.style.setProperty('--photo-max-height', t.photoMaxHeight + 'px');
+  updateSettingsPreview(t);
+}
+
+function updateSettingsPreview(t) {
+  var el = document.getElementById('settingsPreview');
+  if (!el) return;
+  el.style.fontFamily = t.packTypeFontFamily;
+  el.style.fontSize = t.packTypeFontSize + 'px';
+  el.style.color = t.packTypeColor;
+  el.style.fontWeight = t.packTypeBold ? '700' : '400';
+}
+
+function readSettingsFromUI() {
+  return {
+    packTypeFontFamily: document.getElementById('setFontFamily').value,
+    packTypeFontSize: parseInt(document.getElementById('setFontSize').value),
+    packTypeColor: document.getElementById('setColor').value,
+    packTypeBold: document.getElementById('setBold').checked,
+    photoMaxHeight: parseInt(document.getElementById('setPhotoSize').value),
+    timerPacked: parseInt(document.getElementById('setTimer1').value),
+    timerError: parseInt(document.getElementById('setTimer2').value),
+  };
+}
+
+function saveSettings() {
+  settings = readSettingsFromUI();
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
+  applySettings();
+  document.getElementById('settingsOverlay').classList.remove('active');
+}
+
+function settingsOverlayBgClick(e) {
+  if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+}
+
 // ── Apps Script URL — бэкенд ──
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwg4XoEi9Gmxv-SY2K_KglrSh64agoFitr6pwCIM9MxubDaq50URogmfDpEkuZc7NBUag/exec';
 
@@ -358,6 +841,7 @@ function goIdle() {
   clearErrorTimer();
   clearTimer();
   closePhotoFullscreen();
+  closeCamera();
   var t = document.getElementById('pageTitle');
   if (t) t.style.display = '';
   currentModel = '';
@@ -410,8 +894,8 @@ function showPreloader(show) {
 }
 
 function onSearch() {
-  const barcode = document.getElementById('barcodeInput').value.trim();
-  if (!barcode) return;
+  const query = document.getElementById('barcodeInput').value.trim();
+  if (!query) return;
 
   // Если данные ещё не загрузились — ждём
   if (!dataLoaded && !dataLoadError) {
@@ -420,17 +904,30 @@ function onSearch() {
     return;
   }
 
-  // Локальный поиск — мгновенно!
-  const item = barcodeToModel[barcode.toString().trim()];
+  // Сначала ищем по штрих-коду, затем по номеру модели
+  let item = barcodeToModel[query];
+  let foundBarcode = query;
+
+  if (!item) {
+    const queryLower = query.toLowerCase();
+    const matchedKey = Object.keys(barcodeToModel).find(function(bc) {
+      return barcodeToModel[bc].model.toLowerCase() === queryLower;
+    });
+    if (matchedKey) {
+      item = barcodeToModel[matchedKey];
+      foundBarcode = matchedKey;
+    }
+  }
+
   if (!item) {
     document.getElementById('pageTitle').style.display = 'none';
-    showError('Штрих-код не найден');
+    showError('Штрих-код или модель не найдены');
     startErrorTimer();
     return;
   }
 
   // Показываем штрих-код, модель и фото
-  document.getElementById('scanBarcode').textContent = 'Штрих-код: ' + barcode;
+  document.getElementById('scanBarcode').textContent = 'Штрих-код: ' + foundBarcode;
   document.getElementById('scanModel').textContent = 'Модель: ' + item.model;
   // Фото или "фото не найдено"
   const photoEl = document.getElementById('scanPhoto');
@@ -452,7 +949,7 @@ function onSearch() {
   if (item.repacked) {
     document.getElementById('scanInfo').classList.add('hidden');
     document.getElementById('pageTitle').style.display = 'none';
-    document.getElementById('packedBarcode').textContent = barcode;
+    document.getElementById('packedBarcode').textContent = foundBarcode;
     document.getElementById('packedModel').textContent = item.model;
     document.getElementById('packedType').textContent = item.packType || '(тип не указан)';
     const pPhoto = document.getElementById('packedPhoto');
@@ -485,12 +982,12 @@ let errorTimerSeconds = 5;
 
 function startErrorTimer() {
   clearErrorTimer();
-  errorTimerSeconds = 5;
+  errorTimerSeconds = settings.timerError;
   updateErrorTimerDisplay();
   document.getElementById('errorTimerBar').style.width = '100%';
   setTimeout(function() {
     document.getElementById('errorTimerBar').style.width = '0%';
-    document.getElementById('errorTimerBar').style.transitionDuration = '5s';
+    document.getElementById('errorTimerBar').style.transitionDuration = settings.timerError + 's';
   }, 50);
   errorTimerInterval = setInterval(function() {
     errorTimerSeconds--;
@@ -517,13 +1014,13 @@ function clearErrorTimer() {
 
 function startTimer() {
   clearTimer();
-  timerSeconds = 10;
+  timerSeconds = settings.timerPacked;
   updateTimerDisplay();
   document.getElementById('timerBar').style.width = '100%';
 
   setTimeout(function() {
     document.getElementById('timerBar').style.width = '0%';
-    document.getElementById('timerBar').style.transitionDuration = '10s';
+    document.getElementById('timerBar').style.transitionDuration = settings.timerPacked + 's';
   }, 50);
 
   timerInterval = setInterval(function() {
@@ -617,6 +1114,574 @@ function showError(msg) {
   showState('stateError');
 }
 
+// ── Таблица всех изделий ──
+var tableActiveType = '';
+var tableChangedModels = new Set();
+var TABLE_PACK_TYPES = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
+
+function openTableView() {
+  var view = document.getElementById('tableView');
+  view.scrollTop = 0;
+  document.getElementById('tblSearch').value = '';
+  view.classList.add('active'); // запускаем анимацию
+  // Ждём первый кадр (анимация пошла), потом тяжёлый рендер
+  requestAnimationFrame(function() {
+    var h = document.querySelector('.tbl-topbar').offsetHeight;
+    document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
+    buildTypeTabs();
+    renderTableView();
+  });
+}
+
+function closeTableView() {
+  if (tableChangedModels.size > 0) {
+    if (!confirm('Есть несохранённые изменения. Закрыть без сохранения?')) return;
+    tableChangedModels.clear();
+  }
+  document.getElementById('tableView').classList.remove('active');
+}
+
+function buildTypeTabs() {
+  var types = new Set();
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (item.type) types.add(item.type);
+  });
+  types = Array.from(types).sort();
+
+  var wrap = document.getElementById('tblTabsWrap');
+  if (!types.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  wrap.innerHTML = [''].concat(types).map(function(t) {
+    var active = tableActiveType === t ? ' active' : '';
+    var label = t || 'Все';
+    return '<button class="tbl-tab' + active + '" data-type="' + esc(t) + '">' + esc(label) + '</button>';
+  }).join('');
+
+  wrap.querySelectorAll('.tbl-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tableActiveType = this.dataset.type;
+      wrap.querySelectorAll('.tbl-tab').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      renderTableView();
+    });
+  });
+}
+
+// Разбирает «1-11711/1» → { type:1, model:11711, design:1 }
+function parseModelNum(m) {
+  m = (m || '').toString();
+  var dash = m.indexOf('-');
+  if (dash === -1) return { type: 999999, model: 999999, design: 0 };
+  var slash = m.indexOf('/', dash);
+  var type   = parseInt(m.slice(0, dash))                          || 0;
+  var model  = parseInt(slash > dash ? m.slice(dash+1, slash) : m.slice(dash+1)) || 0;
+  var design = parseInt(slash > dash ? m.slice(slash+1) : '0')    || 0;
+  return { type: type, model: model, design: design };
+}
+
+function getTableModels() {
+  var search = (document.getElementById('tblSearch').value || '').toLowerCase().trim();
+  var seen = {};
+  var models = [];
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (seen[item.model]) return;
+    seen[item.model] = true;
+    if (tableActiveType && item.type !== tableActiveType) return;
+    if (search && item.model.toLowerCase().indexOf(search) === -1) return;
+    models.push(item);
+  });
+  models.sort(function(a, b) {
+    if (a.repacked !== b.repacked) return a.repacked ? -1 : 1; // упакованные первыми
+    var pa = parseModelNum(a.model), pb = parseModelNum(b.model);
+    if (pa.type !== pb.type) return pa.type - pb.type;
+    if (pa.model !== pb.model) return pa.model - pb.model;
+    return pa.design - pb.design;
+  });
+  return models;
+}
+
+function renderTableView() {
+  var models = getTableModels();
+  var tbody = document.getElementById('tblBody');
+  var empty = document.getElementById('tblEmpty');
+
+  if (!models.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = models.map(function(item) {
+    var isChanged = tableChangedModels.has(item.model);
+    var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+    var photoHtml = item.photoUrl
+      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
+      : '';
+    var packOpts = '<option value="">—</option>' + TABLE_PACK_TYPES.map(function(pt) {
+      return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
+    }).join('');
+    var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+    return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
+      + '<td class="tbl-model">' + esc(item.model) + '</td>'
+      + '<td class="tbl-col-photo">' + photoHtml + '</td>'
+      + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
+      + '<td><select class="tbl-pack-sel">' + packOpts + '</select></td>'
+      + '<td>' + saveBtn + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+// Делегирование событий таблицы — регистрируется после загрузки DOM
+function initTableEvents() {
+  document.getElementById('tblBody').addEventListener('change', function(e) {
+    var tr = e.target.closest('tr[data-model]');
+    if (!tr) return;
+    var model = tr.dataset.model;
+    if (e.target.type === 'checkbox') {
+      tblSetRepacked(model, e.target.checked, tr);
+    } else if (e.target.classList.contains('tbl-pack-sel')) {
+      tblSetPackType(model, e.target.value, tr);
+    }
+  });
+  document.getElementById('tblBody').addEventListener('click', function(e) {
+    if (!e.target.classList.contains('tbl-save-btn')) return;
+    var tr = e.target.closest('tr[data-model]');
+    if (tr) saveTableItem(tr.dataset.model, e.target);
+  });
+}
+
+function tblSetRepacked(model, checked, tr) {
+  Object.keys(barcodeToModel).forEach(function(bc) {
+    if (barcodeToModel[bc].model === model) barcodeToModel[bc].repacked = checked;
+  });
+  tableChangedModels.add(model);
+  tblRefreshRow(tr, model);
+  tblUpdateStats();
+}
+
+function tblSetPackType(model, packType, tr) {
+  Object.keys(barcodeToModel).forEach(function(bc) {
+    if (barcodeToModel[bc].model === model) barcodeToModel[bc].packType = packType;
+  });
+  tableChangedModels.add(model);
+  tblRefreshRow(tr, model);
+}
+
+function tblRefreshRow(tr, model) {
+  var item = Object.values(barcodeToModel).find(function(i) { return i.model === model; });
+  if (!item) return;
+  var isChanged = tableChangedModels.has(model);
+  tr.className = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+  var lastTd = tr.lastElementChild;
+  lastTd.innerHTML = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+}
+
+function tblUpdateStats() {
+  // счётчики убраны
+}
+
+function saveTableItem(model, btn) {
+  var item = Object.values(barcodeToModel).find(function(i) { return i.model === model; });
+  if (!item) return;
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  apiCall('saveItem', { model: model, repacked: item.repacked ? 'true' : 'false', packType: item.packType || '' })
+    .then(function(result) {
+      if (result && result.success) {
+        tableChangedModels.delete(model);
+        var tr = document.querySelector('#tblBody tr[data-model="' + esc(model) + '"]');
+        if (tr) tblRefreshRow(tr, model);
+      } else {
+        if (btn) { btn.textContent = 'Записать'; btn.disabled = false; }
+        alert('Ошибка: ' + ((result && result.error) || 'неизвестно'));
+      }
+    });
+}
+
+function esc(str) {
+  return (str || '').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ═══════════════════════════════════════════════
+// ── Настройки сканеров (по режимам) ──
+// ═══════════════════════════════════════════════
+
+var SCANNER_CFG_KEY = 'scannerCameraCfg_v1';
+var _scCfgMode = ''; // какой режим сейчас редактируется
+
+// Форматы ZXing (basic/advanced)
+var ZXING_FMTS = [
+  { id: 'EAN_13',       label: 'EAN-13' },
+  { id: 'EAN_8',        label: 'EAN-8' },
+  { id: 'QR_CODE',      label: 'QR Code' },
+  { id: 'DATA_MATRIX',  label: 'DataMatrix' },
+  { id: 'CODE_128',     label: 'Code 128' },
+  { id: 'CODE_39',      label: 'Code 39' },
+  { id: 'CODE_93',      label: 'Code 93' },
+  { id: 'ITF',          label: 'ITF' },
+  { id: 'CODABAR',      label: 'Codabar' },
+  { id: 'PDF_417',      label: 'PDF 417' },
+  { id: 'AZTEC',        label: 'Aztec' },
+  { id: 'UPC_A',        label: 'UPC-A' },
+  { id: 'UPC_E',        label: 'UPC-E' },
+  { id: 'RSS_14',       label: 'RSS-14' },
+  { id: 'RSS_EXPANDED', label: 'RSS Expanded' },
+];
+
+// Форматы BarcodeDetector (scanbot)
+var BD_FMTS = [
+  { id: 'ean_13',      label: 'EAN-13' },
+  { id: 'ean_8',       label: 'EAN-8' },
+  { id: 'qr_code',     label: 'QR Code' },
+  { id: 'data_matrix', label: 'DataMatrix' },
+  { id: 'code_128',    label: 'Code 128' },
+  { id: 'code_39',     label: 'Code 39' },
+  { id: 'code_93',     label: 'Code 93' },
+  { id: 'itf',         label: 'ITF' },
+  { id: 'codabar',     label: 'Codabar' },
+  { id: 'pdf417',      label: 'PDF 417' },
+  { id: 'aztec',       label: 'Aztec' },
+  { id: 'upc_a',       label: 'UPC-A' },
+  { id: 'upc_e',       label: 'UPC-E' },
+];
+
+// Маппинг BD → ZXing (для фоллбэка)
+var BD_TO_ZXING = {
+  ean_13:'EAN_13', ean_8:'EAN_8', qr_code:'QR_CODE', data_matrix:'DATA_MATRIX',
+  code_128:'CODE_128', code_39:'CODE_39', code_93:'CODE_93', itf:'ITF',
+  codabar:'CODABAR', pdf417:'PDF_417', aztec:'AZTEC', upc_a:'UPC_A', upc_e:'UPC_E'
+};
+
+function defaultScCfg() {
+  return {
+    basic: {
+      formats: ['EAN_13','EAN_8','QR_CODE','DATA_MATRIX'],
+      resolution: 720, fps: 30, scanInterval: 300,
+      tryHarder: false, charset: ''
+    },
+    advanced: {
+      formats: ['EAN_13','EAN_8','QR_CODE','DATA_MATRIX','CODE_128','CODE_39','ITF','PDF_417','AZTEC'],
+      resolution: 1080, fps: 30, scanInterval: 150,
+      tryHarder: true, charset: 'UTF-8'
+    },
+    scanbot: {
+      formats: ['ean_13','ean_8','qr_code','data_matrix'],
+      resolution: 1080, fps: 30, scanInterval: 200,
+      tryHarder: false, charset: ''
+    }
+  };
+}
+
+var scCfg = defaultScCfg();
+
+function loadScCfg() {
+  try {
+    var s = localStorage.getItem(SCANNER_CFG_KEY);
+    if (s) {
+      var p = JSON.parse(s);
+      ['basic','advanced','scanbot'].forEach(function(m) {
+        if (p[m]) Object.assign(scCfg[m], p[m]);
+      });
+    }
+  } catch(e) {}
+}
+
+function saveScCfgStorage() {
+  try { localStorage.setItem(SCANNER_CFG_KEY, JSON.stringify(scCfg)); } catch(e) {}
+}
+
+function openScannerCfg(mode) {
+  _scCfgMode = mode;
+  var titles = { basic:'📷 Камера', advanced:'🔬 Расширенный сканер', scanbot:'📱 ScanBot' };
+  document.getElementById('scannerCfgTitle').textContent = 'Настройки: ' + (titles[mode] || mode);
+
+  var isScanbot = mode === 'scanbot';
+  var fmtList = isScanbot ? BD_FMTS : ZXING_FMTS;
+  var c = scCfg[mode];
+
+  // Форматы
+  var grid = document.getElementById('scFmtGrid');
+  grid.innerHTML = fmtList.map(function(f) {
+    var chk = c.formats.indexOf(f.id) >= 0 ? ' checked' : '';
+    return '<label class="fmt-item"><input type="checkbox" value="' + f.id + '"' + chk + '>' + f.label + '</label>';
+  }).join('');
+
+  // Разрешение
+  document.getElementById('scResolution').value = c.resolution;
+
+  // FPS
+  document.getElementById('scFps').value = c.fps;
+  document.getElementById('scFpsVal').textContent = c.fps;
+
+  // Интервал
+  document.getElementById('scInterval').value = c.scanInterval;
+  document.getElementById('scIntervalVal').textContent = c.scanInterval;
+
+  // TRY_HARDER + charset — только для ZXing
+  document.getElementById('scTryHarderGroup').style.display = isScanbot ? 'none' : '';
+  document.getElementById('scCharsetGroup').style.display = isScanbot ? 'none' : '';
+  if (!isScanbot) {
+    document.getElementById('scTryHarder').checked = c.tryHarder;
+    document.getElementById('scCharset').value = c.charset || '';
+  }
+
+  // API-заметка для ScanBot
+  document.getElementById('scApiNote').style.display =
+    (isScanbot && !('BarcodeDetector' in window)) ? '' : 'none';
+
+  document.getElementById('scannerCfgOverlay').classList.add('active');
+}
+
+function closeScannerCfg() {
+  document.getElementById('scannerCfgOverlay').classList.remove('active');
+}
+
+function saveScannerCfg() {
+  var m = _scCfgMode;
+  if (!m) return;
+
+  var fmts = [];
+  document.querySelectorAll('#scFmtGrid input[type=checkbox]:checked').forEach(function(cb) {
+    fmts.push(cb.value);
+  });
+
+  scCfg[m] = {
+    formats: fmts,
+    resolution: parseInt(document.getElementById('scResolution').value),
+    fps: parseInt(document.getElementById('scFps').value),
+    scanInterval: parseInt(document.getElementById('scInterval').value),
+    tryHarder: document.getElementById('scTryHarder').checked,
+    charset: (document.getElementById('scCharset').value || '')
+  };
+
+  saveScCfgStorage();
+  closeScannerCfg();
+}
+
+function resetScannerCfg() {
+  var m = _scCfgMode;
+  if (!m) return;
+  scCfg[m] = defaultScCfg()[m];
+  saveScCfgStorage();
+  openScannerCfg(m); // перерисовка
+}
+
+// ═══════════════════════════════════════════════
+// ── Камера / сканеры ──
+// ═══════════════════════════════════════════════
+
+var codeReader = null;
+var zxingLoaded = false;
+var _scanBotTimer = null;
+var _currentTrack = null;
+var _activeScanMode = '';
+
+function loadZXing() {
+  return new Promise(function(resolve, reject) {
+    if (zxingLoaded) { resolve(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+    s.onload = function() { zxingLoaded = true; resolve(); };
+    s.onerror = function() { reject(new Error('Не удалось загрузить библиотеку сканирования')); };
+    document.head.appendChild(s);
+  });
+}
+
+function resToWidth(h) {
+  if (h >= 1920) return 3840;
+  if (h >= 1080) return 1920;
+  if (h >= 720) return 1280;
+  return 640;
+}
+
+// Общая точка входа — открывает камеру в нужном режиме
+function openCameraMode(mode) {
+  _activeScanMode = mode;
+  var labels = { basic:'Камера', advanced:'Расширенный', scanbot:'ScanBot' };
+  document.getElementById('cameraModeLabel').textContent = labels[mode] || mode;
+
+  var c = scCfg[mode];
+
+  // Форма рамки: квадрат если есть 2D-форматы
+  var zone = document.getElementById('scanZone');
+  var has2D = c.formats.some(function(f) {
+    return /QR|qr|MATRIX|matrix|AZTEC|aztec|PDF|pdf/i.test(f);
+  });
+  if (has2D) {
+    zone.style.width = 'min(70vw, 300px)';
+    zone.style.height = 'min(70vw, 300px)';
+  } else {
+    zone.style.width = 'min(80vw, 360px)';
+    zone.style.height = 'min(28vw, 120px)';
+  }
+
+  document.getElementById('cameraOverlay').classList.add('active');
+
+  if (mode === 'scanbot') {
+    startScanBot(c);
+  } else {
+    startZxing(c);
+  }
+}
+
+// ── ZXing-движок (basic / advanced) ──
+function startZxing(c) {
+  loadZXing()
+    .then(function() {
+      var hints = new Map();
+
+      var fmts = c.formats.map(function(f) { return ZXing.BarcodeFormat[f]; }).filter(Boolean);
+      if (fmts.length) hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, fmts);
+      if (c.tryHarder) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      if (c.charset) hints.set(ZXing.DecodeHintType.CHARACTER_SET, c.charset);
+
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      codeReader.timeBetweenDecodingAttempts = c.scanInterval || 300;
+
+      return codeReader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: 'environment',
+            width:     { ideal: resToWidth(c.resolution) },
+            height:    { ideal: c.resolution },
+            frameRate: { ideal: c.fps || 30 }
+          }
+        },
+        document.getElementById('cameraVideo'),
+        function(result) {
+          if (result) onScanResult(result.getText());
+        }
+      );
+    })
+    .then(function() {
+      grabTrackAndCheckTorch();
+    })
+    .catch(function(e) {
+      closeCamera();
+      showError('Камера недоступна: ' + (e.message || e));
+      startErrorTimer();
+    });
+}
+
+// ── ScanBot-движок (BarcodeDetector API, фоллбэк → ZXing) ──
+function startScanBot(c) {
+  var useBD = 'BarcodeDetector' in window;
+
+  if (!useBD) {
+    // Фоллбэк: конвертируем BD-форматы в ZXing и запускаем ZXing
+    var converted = {
+      formats: c.formats.map(function(f) { return BD_TO_ZXING[f]; }).filter(Boolean),
+      resolution: c.resolution,
+      fps: c.fps,
+      scanInterval: c.scanInterval,
+      tryHarder: false,
+      charset: ''
+    };
+    startZxing(converted);
+    return;
+  }
+
+  // Нативный BarcodeDetector
+  var video = document.getElementById('cameraVideo');
+  var constraints = {
+    video: {
+      facingMode: 'environment',
+      width:     { ideal: resToWidth(c.resolution) },
+      height:    { ideal: c.resolution },
+      frameRate: { ideal: c.fps || 30 }
+    }
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(function(stream) {
+      video.srcObject = stream;
+      _currentTrack = stream.getVideoTracks()[0];
+      checkTorchCapability();
+
+      var bdFmts = c.formats.length ? c.formats : ['ean_13','qr_code','data_matrix'];
+      var detector = new BarcodeDetector({ formats: bdFmts });
+
+      _scanBotTimer = setInterval(function() {
+        if (video.readyState < 2) return;
+        detector.detect(video)
+          .then(function(codes) {
+            if (codes.length > 0) onScanResult(codes[0].rawValue);
+          })
+          .catch(function() {});
+      }, c.scanInterval || 200);
+    })
+    .catch(function(e) {
+      closeCamera();
+      showError('Камера недоступна: ' + (e.message || e));
+      startErrorTimer();
+    });
+}
+
+function onScanResult(text) {
+  if (!text) return;
+  closeCamera();
+  document.getElementById('barcodeInput').value = text;
+  onSearch();
+}
+
+function closeCamera() {
+  document.getElementById('cameraOverlay').classList.remove('active');
+
+  // Останавливаем ScanBot-таймер
+  if (_scanBotTimer) { clearInterval(_scanBotTimer); _scanBotTimer = null; }
+
+  // Останавливаем ZXing (он сам выключает стрим)
+  if (codeReader) {
+    try { codeReader.reset(); } catch(e) {}
+    codeReader = null;
+  } else {
+    // Если нет ZXing — стрим надо закрыть вручную
+    var video = document.getElementById('cameraVideo');
+    if (video && video.srcObject) {
+      video.srcObject.getTracks().forEach(function(t) { t.stop(); });
+      video.srcObject = null;
+    }
+  }
+
+  _currentTrack = null;
+
+  // Прячем и сбрасываем фонарик
+  var tb = document.getElementById('torchBtn');
+  if (tb) { tb.classList.remove('visible','on'); }
+}
+
+// ── Фонарик (torch) ──
+function grabTrackAndCheckTorch() {
+  var video = document.getElementById('cameraVideo');
+  if (video && video.srcObject) {
+    _currentTrack = video.srcObject.getVideoTracks()[0];
+  }
+  checkTorchCapability();
+}
+
+function checkTorchCapability() {
+  var tb = document.getElementById('torchBtn');
+  if (!_currentTrack || !tb) return;
+  try {
+    var caps = _currentTrack.getCapabilities();
+    if (caps && caps.torch) tb.classList.add('visible');
+  } catch(e) {}
+}
+
+function toggleTorch() {
+  if (!_currentTrack) return;
+  var tb = document.getElementById('torchBtn');
+  var isOn = tb.classList.contains('on');
+  try {
+    _currentTrack.applyConstraints({ advanced: [{ torch: !isOn }] })
+      .then(function() { tb.classList.toggle('on'); })
+      .catch(function() {});
+  } catch(e) {}
+}
+
 // ── Полноэкранное фото ──
 function openPhotoFullscreen(src) {
   var overlay = document.getElementById('photoOverlay');
@@ -638,8 +1703,11 @@ function closePhotoFullscreen() {
   if (overlay) overlay.classList.remove('active');
 }
 
-// При загрузке: фокус + предзагрузка всех данных + SW
+// При загрузке: настройки + данные + SW
 window.onload = function() {
+  initTableEvents();
+  loadSettings();
+  loadScCfg();
   preloadAllData();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
@@ -650,6 +1718,170 @@ window.onload = function() {
 <!-- Полноэкранное фото -->
 <div class="photo-overlay" id="photoOverlay" onclick="closePhotoFullscreen()">
   <img id="photoOverlayImg" src="" alt="Фото">
+</div>
+
+<!-- Настройки -->
+<div id="settingsOverlay" class="settings-overlay" onclick="settingsOverlayBgClick(event)">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <span class="settings-title">⚙️ Настройки</span>
+      <button class="settings-close-btn" onclick="closeSettings()">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Шрифт типа упаковки</div>
+      <select id="setFontFamily" class="settings-select" onchange="previewSettings()">
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="Georgia, serif">Georgia</option>
+        <option value="'Courier New', monospace">Courier New</option>
+        <option value="Impact, sans-serif">Impact</option>
+        <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Размер шрифта: <b id="setFontSizeVal">56</b> px</div>
+      <input type="range" id="setFontSize" class="settings-range" min="20" max="120" value="56" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Цвет текста</div>
+      <input type="color" id="setColor" class="settings-color" value="#15803d" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setBold" checked onchange="previewSettings()">
+        Жирный шрифт
+      </label>
+    </div>
+
+    <div class="settings-preview-box">
+      <div class="settings-preview-label">Предпросмотр</div>
+      <div id="settingsPreview" style="line-height:1.2">коробка S 28x19.5x30</div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Размер картинки: <b id="setPhotoSizeVal">300</b> px</div>
+      <input type="range" id="setPhotoSize" class="settings-range" min="80" max="500" value="300" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Таймер «Уже упаковано»: <b id="setTimer1Val">10</b> сек</div>
+      <input type="range" id="setTimer1" class="settings-range" min="3" max="60" value="10" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Таймер ошибки: <b id="setTimer2Val">5</b> сек</div>
+      <input type="range" id="setTimer2" class="settings-range" min="2" max="30" value="5" oninput="previewSettings()">
+    </div>
+
+    <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+    <button class="btn btn-secondary" onclick="closeSettings()" style="margin-top:10px">Отмена</button>
+  </div>
+</div>
+
+<!-- Настройки сканера -->
+<div id="scannerCfgOverlay" class="scanner-cfg-overlay" onclick="if(event.target===this)closeScannerCfg()">
+  <div class="scanner-cfg-panel">
+    <div class="settings-header">
+      <span class="settings-title" id="scannerCfgTitle">Настройки сканера</span>
+      <button class="settings-close-btn" onclick="closeScannerCfg()">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Форматы штрих-кодов</div>
+      <div class="fmt-grid" id="scFmtGrid"></div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Разрешение камеры</div>
+      <select id="scResolution" class="settings-select">
+        <option value="480">480p (быстро)</option>
+        <option value="720">720p (баланс)</option>
+        <option value="1080">1080p (качество)</option>
+        <option value="1920">4K (максимум)</option>
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Частота кадров: <b id="scFpsVal">30</b> fps</div>
+      <input type="range" id="scFps" class="settings-range" min="10" max="60" step="5" value="30"
+        oninput="document.getElementById('scFpsVal').textContent=this.value">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Интервал сканирования: <b id="scIntervalVal">300</b> мс</div>
+      <input type="range" id="scInterval" class="settings-range" min="50" max="2000" step="50" value="300"
+        oninput="document.getElementById('scIntervalVal').textContent=this.value">
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">Меньше — быстрее обнаружение, больше нагрузка</div>
+    </div>
+
+    <div class="settings-group" id="scTryHarderGroup">
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="scTryHarder">
+        TRY_HARDER (тщательное сканирование)
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">Медленнее, но лучше распознаёт повреждённые штрих-коды</div>
+    </div>
+
+    <div class="settings-group" id="scCharsetGroup">
+      <div class="settings-label">Кодировка</div>
+      <select id="scCharset" class="settings-select">
+        <option value="">Авто</option>
+        <option value="UTF-8">UTF-8</option>
+        <option value="ISO-8859-1">ISO-8859-1</option>
+        <option value="Shift_JIS">Shift_JIS</option>
+      </select>
+    </div>
+
+    <div id="scApiNote" class="scanner-cfg-note" style="display:none">
+      ⚠️ BarcodeDetector API недоступна в этом браузере. Будет использован запасной движок ZXing.
+    </div>
+
+    <button class="btn btn-primary" onclick="saveScannerCfg()">Сохранить</button>
+    <button class="btn btn-secondary" onclick="closeScannerCfg()" style="margin-top:10px">Отмена</button>
+    <button class="btn btn-secondary" onclick="resetScannerCfg()" style="margin-top:6px;font-size:14px;color:#9ca3af">Сбросить по умолчанию</button>
+  </div>
+</div>
+
+<!-- Таблица всех изделий -->
+<div id="tableView" class="table-overlay">
+  <div class="tbl-topbar">
+    <button class="tbl-back-btn" onclick="closeTableView()">← Сканер</button>
+    <span class="tbl-title">Все изделия</span>
+  </div>
+  <div class="tbl-tabs-wrap" id="tblTabsWrap"></div>
+  <div class="tbl-search-wrap">
+    <input type="text" id="tblSearch" placeholder="🔍 Поиск по номеру модели..." oninput="renderTableView()">
+  </div>
+  <div class="tbl-scroll">
+    <table class="tbl-table">
+      <thead>
+        <tr>
+          <th>Модель</th>
+          <th class="tbl-col-photo">Фото</th>
+          <th class="tbl-center">Упак.</th>
+          <th>Коробка / пакет</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tblBody"></tbody>
+    </table>
+    <div id="tblEmpty" class="tbl-empty" style="display:none">Нет данных</div>
+  </div>
+</div>
+
+<!-- Камера -->
+<div id="cameraOverlay" class="camera-overlay">
+  <video id="cameraVideo" autoplay muted playsinline></video>
+  <div class="scan-zone" id="scanZone">
+    <div class="scan-line"></div>
+  </div>
+  <span class="camera-mode-label" id="cameraModeLabel"></span>
+  <button class="torch-btn" id="torchBtn" onclick="toggleTorch()">🔦</button>
+  <button class="camera-close-btn" onclick="closeCamera()">✕</button>
+  <div class="camera-hint">Наведите штрих-код в рамку</div>
 </div>
 
 </body>
