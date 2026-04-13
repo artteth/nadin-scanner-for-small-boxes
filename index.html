@@ -577,6 +577,112 @@
     .torch-btn.visible { display: flex; }
     .torch-btn.on { background: rgba(255,200,0,0.6); }
 
+    /* ── BLE Плавающая кнопка ── */
+    .ble-fab {
+      position: fixed;
+      bottom: max(24px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+      right: max(20px, calc(env(safe-area-inset-right, 0px) + 16px));
+      z-index: 60000;
+      width: 50px; height: 50px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,0,0,0.08);
+      background: #e5e7eb;
+      color: #374151;
+      font-size: 22px;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.25s, box-shadow 0.25s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ble-fab.ble-connected {
+      background: #15803d;
+      color: white;
+      border-color: transparent;
+      animation: bleGlow 2.4s ease-in-out infinite;
+    }
+    @keyframes bleGlow {
+      0%, 100% { box-shadow: 0 4px 16px rgba(21,128,61,0.35); }
+      50%       { box-shadow: 0 4px 28px rgba(21,128,61,0.70); }
+    }
+    .ble-fab:active { transform: scale(0.90); }
+
+    /* ── BLE панель ── */
+    .ble-panel-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100002;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .ble-panel-overlay.active { display: flex; }
+    .ble-panel {
+      background: white;
+      width: 100%;
+      max-width: min(600px, 100vw);
+      border-radius: 20px 20px 0 0;
+      padding: clamp(16px, 4vw, 28px);
+      padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+    }
+    .ble-status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 8px;
+    }
+    .ble-dot {
+      width: 13px; height: 13px;
+      border-radius: 50%;
+      background: #d1d5db;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .ble-dot.on { background: #15803d; }
+    .ble-device-name {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 18px;
+      padding-left: 25px;
+    }
+    .ble-note {
+      background: #f0f9ff;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 13px;
+      color: #0369a1;
+      margin: 14px 0;
+      line-height: 1.5;
+    }
+
+    /* ── BLE тост ── */
+    .ble-toast {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top, 0px));
+      left: 50%;
+      transform: translateX(-50%) translateY(-90px);
+      z-index: 100010;
+      background: #1e293b;
+      color: white;
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      max-width: calc(100vw - 32px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .ble-toast.show { transform: translateX(-50%) translateY(0); }
+
     /* Утилиты */
     .hidden { display: none; }
   </style>
@@ -1703,12 +1809,226 @@ function closePhotoFullscreen() {
   if (overlay) overlay.classList.remove('active');
 }
 
+// ═══════════════════════════════════════════════
+// ── BLE Сканер (глобальный) ──
+// ═══════════════════════════════════════════════
+
+var ble = {
+  device: null,
+  server: null,
+  connected: false,
+  lastText: '',
+  lastTime: 0,
+  dedupeMs: 2000,   // игнорировать повтор того же кода в течение 2 сек
+
+  // UUIDs сервисов — охватывают большинство BLE-сканеров
+  SERVICES: [
+    '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART (NUS) — самый распространённый
+    '6e400002-b5a3-f393-e0a9-e50e24dcca9e', // NUS TX
+    '6e400003-b5a3-f393-e0a9-e50e24dcca9e', // NUS RX
+    '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 (распространённые китайские сканеры)
+    '0000ffe1-0000-1000-8000-00805f9b34fb', // HM-10 characteristic
+    '0000dfb0-0000-1000-8000-00805f9b34fb', // Zebra, Honeywell и др.
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455', // RSC Service
+    '0000fff0-0000-1000-8000-00805f9b34fb', // TI / некоторые Китайские
+    '0000fff1-0000-1000-8000-00805f9b34fb',
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Silabs
+    '0000180a-0000-1000-8000-00805f9b34fb', // Device Information
+    '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+  ],
+
+  connect: async function() {
+    if (!navigator.bluetooth) {
+      bleSetStatus('⚠️ Web Bluetooth не поддерживается.<br>iOS → Bluefy, Android → Chrome/Edge.', false);
+      return;
+    }
+    var btn = document.getElementById('bleConnectBtn');
+    if (btn) { btn.textContent = '⏳ Поиск...'; btn.disabled = true; }
+
+    try {
+      this.device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: this.SERVICES
+      });
+
+      if (btn) { btn.textContent = '⏳ Подключение...'; }
+
+      this.device.addEventListener('gattserverdisconnected', function() {
+        ble.onDisconnect();
+      });
+
+      this.server = await this.device.gatt.connect();
+      await this.setupNotifications();
+
+      this.connected = true;
+      this.updateUI();
+      closeBlePanel();
+      bleToast('🔗 Подключён: ' + (this.device.name || 'Сканер'));
+    } catch(e) {
+      if (e.name !== 'NotFoundError') {       // NotFoundError = пользователь отменил выбор
+        bleSetStatus('⚠️ ' + (e.message || e), false);
+      }
+      if (btn) { btn.textContent = '🔗 Подключить сканер'; btn.disabled = false; }
+    }
+  },
+
+  setupNotifications: async function() {
+    var services;
+    try { services = await this.server.getPrimaryServices(); } catch(e) { return; }
+
+    for (var si = 0; si < services.length; si++) {
+      try {
+        var chars = await services[si].getCharacteristics();
+        for (var ci = 0; ci < chars.length; ci++) {
+          var c = chars[ci];
+          if (c.properties.notify || c.properties.indicate) {
+            try {
+              await c.startNotifications();
+              c.addEventListener('characteristicvaluechanged', (function(ch) {
+                return function(e) { ble.onData(e.target.value); };
+              })(c));
+            } catch(e) {}
+          }
+        }
+      } catch(e) {}
+    }
+  },
+
+  onData: function(dataView) {
+    try {
+      var decoder = new TextDecoder('utf-8');
+      var text = decoder.decode(dataView)
+        // Удаляем управляющие символы кроме \n \r \t
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+        .trim();
+
+      if (!text || text.length < 3) return;
+
+      // Дедупликация (сканер иногда шлёт несколько пакетов)
+      var now = Date.now();
+      if (text === this.lastText && (now - this.lastTime) < this.dedupeMs) return;
+      this.lastText = text;
+      this.lastTime = now;
+
+      onBLEBarcode(text);
+    } catch(e) {}
+  },
+
+  disconnect: function() {
+    try {
+      if (this.device && this.device.gatt && this.device.gatt.connected) {
+        this.device.gatt.disconnect();
+      }
+    } catch(e) {}
+    this.onDisconnect();
+  },
+
+  onDisconnect: function() {
+    this.connected = false;
+    this.device = null;
+    this.server = null;
+    this.updateUI();
+    bleToast('⛔ BLE сканер отключён');
+  },
+
+  updateUI: function() {
+    // FAB кнопка
+    var fab = document.getElementById('bleFab');
+    if (fab) {
+      if (this.connected) { fab.classList.add('ble-connected'); }
+      else { fab.classList.remove('ble-connected'); }
+    }
+
+    // Точка статуса
+    var dot = document.getElementById('bleDot');
+    if (dot) {
+      if (this.connected) { dot.classList.add('on'); }
+      else { dot.classList.remove('on'); }
+    }
+
+    // Текст статуса
+    var name = this.device && this.device.name ? ': ' + this.device.name : '';
+    bleSetStatus(this.connected ? ('Подключён' + name) : 'Не подключён', this.connected);
+
+    // Имя устройства
+    var devEl = document.getElementById('bleDeviceName');
+    if (devEl) {
+      if (this.connected && this.device && this.device.name) {
+        devEl.textContent = '📟 ' + this.device.name;
+        devEl.style.display = '';
+      } else {
+        devEl.style.display = 'none';
+      }
+    }
+
+    // Кнопки
+    var cb = document.getElementById('bleConnectBtn');
+    var db = document.getElementById('bleDisconnectBtn');
+    if (cb) { cb.style.display = this.connected ? 'none' : ''; cb.textContent = '🔗 Подключить сканер'; cb.disabled = false; }
+    if (db) { db.style.display = this.connected ? '' : 'none'; }
+  }
+};
+
+// ── Глобальный обработчик штрих-кода от BLE ──
+// Работает из любого состояния приложения
+function onBLEBarcode(text) {
+  bleToast('📦 ' + text);
+
+  // Если открыта камера — закрываем её
+  var cam = document.getElementById('cameraOverlay');
+  if (cam && cam.classList.contains('active')) {
+    closeCamera();
+  }
+
+  // Если открыта таблица — закрываем и ищем после завершения анимации
+  var tbl = document.getElementById('tableView');
+  if (tbl && tbl.classList.contains('active')) {
+    tbl.classList.remove('active');
+    setTimeout(function() {
+      document.getElementById('barcodeInput').value = text;
+      onSearch();
+    }, 380);
+    return;
+  }
+
+  // Если открыты какие-либо оверлеи — не мешаем, просто вставляем и ищем
+  document.getElementById('barcodeInput').value = text;
+  onSearch();
+}
+
+// ── BLE UI-функции ──
+function openBlePanel() {
+  ble.updateUI();
+  document.getElementById('blePanelOverlay').classList.add('active');
+}
+function closeBlePanel() {
+  document.getElementById('blePanelOverlay').classList.remove('active');
+}
+function bleConnect() { ble.connect(); }
+function bleDisconnect() { ble.disconnect(); }
+
+function bleSetStatus(html, isOk) {
+  var el = document.getElementById('bleStatusText');
+  if (el) el.innerHTML = html;
+}
+
+var _bleToastTimer = null;
+function bleToast(msg) {
+  var el = document.getElementById('bleToast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  if (_bleToastTimer) clearTimeout(_bleToastTimer);
+  _bleToastTimer = setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+
 // При загрузке: настройки + данные + SW
 window.onload = function() {
   initTableEvents();
   loadSettings();
   loadScCfg();
   preloadAllData();
+  ble.updateUI(); // инициализируем BLE UI
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
   }
@@ -1883,6 +2203,37 @@ window.onload = function() {
   <button class="camera-close-btn" onclick="closeCamera()">✕</button>
   <div class="camera-hint">Наведите штрих-код в рамку</div>
 </div>
+
+
+<!-- ── BLE: плавающая кнопка ── -->
+<button id="bleFab" class="ble-fab" onclick="openBlePanel()" title="Bluetooth сканер">
+  ᯤ
+</button>
+
+<!-- ── BLE: панель управления ── -->
+<div id="blePanelOverlay" class="ble-panel-overlay" onclick="if(event.target===this)closeBlePanel()">
+  <div class="ble-panel">
+    <div class="settings-header">
+      <span class="settings-title">📡 BLE Сканер</span>
+      <button class="settings-close-btn" onclick="closeBlePanel()">✕</button>
+    </div>
+    <div class="ble-status-row">
+      <div class="ble-dot" id="bleDot"></div>
+      <span id="bleStatusText">Не подключён</span>
+    </div>
+    <div class="ble-device-name" id="bleDeviceName" style="display:none"></div>
+    <button id="bleConnectBtn" class="btn btn-primary" onclick="bleConnect()" style="margin-top:4px">🔗 Подключить сканер</button>
+    <button id="bleDisconnectBtn" class="btn btn-danger" onclick="bleDisconnect()" style="display:none;margin-top:10px">⛔ Отключить</button>
+    <div class="ble-note">
+      <b>iOS:</b> Используйте браузер <b>Bluefy</b> — он поддерживает Web Bluetooth.<br>
+      <b>Android:</b> Chrome или Edge.
+    </div>
+    <button class="btn btn-secondary" onclick="closeBlePanel()" style="margin-top:6px">Закрыть</button>
+  </div>
+</div>
+
+<!-- ── BLE: тост-уведомление ── -->
+<div id="bleToast" class="ble-toast"></div>
 
 </body>
 </html>
