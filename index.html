@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v121</title>
+  <title>Сканер упаковки v122</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -691,7 +691,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v121</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v122</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -983,6 +983,7 @@ function preloadAllData() {
         showError('Ошибка загрузки: ' + result.error);
       } else {
         barcodeToModel = result.barcodes || {};
+        buildDynamicPackTypes(); // собираем реальные типы упаковки из таблицы
         dataLoaded = true;
         document.getElementById('barcodeInput').focus();
       }
@@ -1223,7 +1224,22 @@ function showError(msg) {
 // ── Таблица всех изделий ──
 var tableActiveType = '';
 var tableChangedModels = new Set();
-var TABLE_PACK_TYPES = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
+// Список типов упаковки — заполняется динамически из загруженных данных
+// Захардкоженные значения служат запасным вариантом если в таблице ничего нет
+var TABLE_PACK_TYPES_DEFAULT = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
+var TABLE_PACK_TYPES = TABLE_PACK_TYPES_DEFAULT.slice();
+
+// Собирает уникальные типы упаковки из загруженных данных barcodeToModel
+function buildDynamicPackTypes() {
+  var types = new Set();
+  // Берём всё что реально есть в Google Таблице
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (item.packType) types.add(item.packType);
+  });
+  // Добавляем стандартные варианты (чтобы можно было выбрать и их)
+  TABLE_PACK_TYPES_DEFAULT.forEach(function(t) { types.add(t); });
+  TABLE_PACK_TYPES = Array.from(types).sort();
+}
 
 function openTableView() {
   var view = document.getElementById('tableView');
@@ -1325,7 +1341,13 @@ function renderTableView() {
     var photoHtml = item.photoUrl
       ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
       : '';
-    var packOpts = '<option value="">—</option>' + TABLE_PACK_TYPES.map(function(pt) {
+    // Если текущий packType товара не входит в список — добавляем его отдельно,
+    // чтобы он показывался как выбранная опция, а не пропадал
+    var packOptsList = TABLE_PACK_TYPES.slice();
+    if (item.packType && packOptsList.indexOf(item.packType) === -1) {
+      packOptsList.unshift(item.packType);
+    }
+    var packOpts = '<option value="">—</option>' + packOptsList.map(function(pt) {
       return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
     }).join('');
     var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
