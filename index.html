@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v127</title>
+  <title>Сканер упаковки v128</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -713,7 +713,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v127</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v128</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1275,7 +1275,8 @@ function renderPackButtons() {
   var types = TABLE_PACK_TYPES.length > 0 ? TABLE_PACK_TYPES : TABLE_PACK_TYPES_DEFAULT;
   container.innerHTML = types.map(function(t) {
     var escaped = esc(t);
-    return '<button class="pack-btn" onclick="selectPack(this,' + JSON.stringify(t) + ')">' + escaped + '</button>';
+    var jsonVal = esc(JSON.stringify(t)); // &quot; вместо " — иначе ломает onclick-атрибут
+    return '<button class="pack-btn" onclick="selectPack(this,' + jsonVal + ')">' + escaped + '</button>';
   }).join('');
 }
 
