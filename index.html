@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v126</title>
+  <title>Сканер упаковки v127</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -117,10 +117,11 @@
       margin-top: clamp(8px, 2vw, 14px);
       touch-action: manipulation;
     }
+    .btn:active { transform: scale(0.96); }
     .btn-primary { background: #15803d; color: white; margin-top: clamp(12px, 3vw, 24px); }
     .btn-primary:active { background: #166534; }
     .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
-    .btn-secondary:active { background: #e5e7eb; }
+    .btn-secondary:active { background: #d1d5db; }
     .btn-danger { background: #dc2626; color: white; }
     .btn-danger:active { background: #b91c1c; }
 
@@ -182,7 +183,7 @@
       touch-action: manipulation;
     }
     .pack-btn:hover { border-color: #15803d; background: #f0fdf4; }
-    .pack-btn:active { transform: scale(0.97); }
+    .pack-btn:active { transform: scale(0.95); background: #d1fae5; border-color: #15803d; }
     .pack-btn.selected { border-color: #15803d; background: #15803d; color: white; }
 
     /* ── SAVING состояние ── */
@@ -340,7 +341,7 @@
       font-size: clamp(13px, 3.5vw, 15px);
       cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
-    .tbl-back-btn:active { background: rgba(255,255,255,0.3); }
+    .tbl-back-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.94); }
     .tbl-title { flex: 1; font-size: clamp(14px, 4vw, 17px); font-weight: 600; text-align: center; }
     .tbl-stats { font-size: clamp(12px, 3vw, 14px); color: rgba(255,255,255,0.75); white-space: nowrap; flex-shrink: 0; }
     .tbl-tabs-wrap {
@@ -362,6 +363,7 @@
       transition: all 0.15s;
     }
     .tbl-tab.active { background: #15803d; color: white; border-color: #15803d; }
+    .tbl-tab:active { transform: scale(0.93); background: #e5e7eb; }
     .tbl-search-wrap {
       padding: 8px 12px;
       background: white;
@@ -413,7 +415,8 @@
     .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
     .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
     @media (max-width: 480px) {
-      .tbl-col-photo { display: none; }
+      .tbl-thumb { width: 26px; height: 26px; }
+      .tbl-pack-sel { max-width: 110px; font-size: 11px; }
     }
 
     /* ── КАМЕРА ── */
@@ -501,7 +504,7 @@
       justify-content: center;
       touch-action: manipulation;
     }
-    .btn-scan-cfg:active { background: #e5e7eb; }
+    .btn-scan-cfg:active { background: #d1d5db; transform: scale(0.90); }
 
     /* ── Настройки сканера (оверлей) ── */
     .scanner-cfg-overlay {
@@ -1281,13 +1284,13 @@ function openTableView() {
   view.scrollTop = 0;
   document.getElementById('tblSearch').value = '';
   view.classList.add('active'); // запускаем анимацию
-  // Ждём первый кадр (анимация пошла), потом тяжёлый рендер
-  requestAnimationFrame(function() {
+  // Даём анимации 50 мс стартануть плавно, потом тяжёлый рендер
+  setTimeout(function() {
     var h = document.querySelector('.tbl-topbar').offsetHeight;
     document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
     buildTypeTabs();
     renderTableView();
-  });
+  }, 50);
 }
 
 function closeTableView() {
@@ -2216,6 +2219,9 @@ function bleToast(msg) {
   if (_bleToastTimer) clearTimeout(_bleToastTimer);
   _bleToastTimer = setTimeout(function() { el.classList.remove('show'); }, 2500);
 }
+
+// iOS-хак: без этого :active не срабатывает внутри overflow:auto контейнеров
+document.addEventListener('touchstart', function(){}, {passive: true});
 
 // При загрузке: настройки + данные + SW
 window.onload = function() {
