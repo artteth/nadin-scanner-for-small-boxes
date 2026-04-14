@@ -109,3 +109,4 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 | v126 | Типы упаковки из GAS (лист AD) + touch-action:manipulation |
 | v127 | setTimeout вместо rAF + iOS :active хак + фото на мобиле |
 | v128 | Фикс renderPackButtons: JSON.stringify + esc() |
+| v129 | Кнопка ↻ + автообновление + фон. обновление после записи |
