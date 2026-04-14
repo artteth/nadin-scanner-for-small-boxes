@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v122</title>
+  <title>Сканер упаковки v123</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -691,7 +691,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v122</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v123</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1842,6 +1842,8 @@ var ble = {
   lastText: '',
   lastTime: 0,
   dedupeMs: 2000,   // игнорировать повтор того же кода в течение 2 сек
+  savedDeviceName: '', // имя последнего устройства (из localStorage)
+  BLE_DEV_KEY: 'bleLastDevice_v1',
 
   // UUIDs сервисов — охватывают большинство BLE-сканеров
   SERVICES: [
@@ -1859,13 +1861,74 @@ var ble = {
     '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
   ],
 
+  // ── Запоминание устройства ──
+  loadSavedDevice: function() {
+    try { this.savedDeviceName = localStorage.getItem(this.BLE_DEV_KEY) || ''; } catch(e) {}
+  },
+  saveDevice: function() {
+    try {
+      if (this.device && this.device.name) {
+        this.savedDeviceName = this.device.name;
+        localStorage.setItem(this.BLE_DEV_KEY, this.device.name);
+      }
+    } catch(e) {}
+  },
+  forgetDevice: function() {
+    this.savedDeviceName = '';
+    try { localStorage.removeItem(this.BLE_DEV_KEY); } catch(e) {}
+    this.updateUI();
+  },
+
+  // ── Авто-переподключение через getDevices() (без диалога выбора) ──
+  reconnect: async function() {
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return false;
+    if (!this.savedDeviceName) return false;
+
+    try {
+      var devices = await navigator.bluetooth.getDevices();
+      var savedName = this.savedDeviceName;
+      var found = null;
+      for (var i = 0; i < devices.length; i++) {
+        if (devices[i].name === savedName) { found = devices[i]; break; }
+      }
+      if (!found) return false;
+
+      this.device = found;
+      this.device.addEventListener('gattserverdisconnected', function() {
+        ble.onDisconnect();
+      });
+
+      this.server = await found.gatt.connect();
+      await this.setupNotifications();
+
+      this.connected = true;
+      this.saveDevice();
+      this.updateUI();
+      return true;
+    } catch(e) {
+      return false;
+    }
+  },
+
+  // ── Основное подключение ──
   connect: async function() {
     if (!navigator.bluetooth) {
       bleSetStatus('⚠️ Web Bluetooth не поддерживается.<br>iOS → Bluefy, Android → Chrome/Edge.', false);
       return;
     }
     var btn = document.getElementById('bleConnectBtn');
-    if (btn) { btn.textContent = '⏳ Поиск...'; btn.disabled = true; }
+    if (btn) { btn.textContent = '⏳ Подключение...'; btn.disabled = true; }
+
+    // Сначала пробуем авто-переподключение к сохранённому устройству (без диалога)
+    var reconnected = await this.reconnect();
+    if (reconnected) {
+      closeBlePanel();
+      bleToast('🔗 Автоподключение: ' + (this.device.name || 'Сканер'));
+      return;
+    }
+
+    // Не удалось — показываем стандартный диалог выбора
+    if (btn) { btn.textContent = '⏳ Выберите устройство...'; }
 
     try {
       this.device = await navigator.bluetooth.requestDevice({
@@ -1883,6 +1946,7 @@ var ble = {
       await this.setupNotifications();
 
       this.connected = true;
+      this.saveDevice(); // запоминаем для авто-переподключения
       this.updateUI();
       closeBlePanel();
       bleToast('🔗 Подключён: ' + (this.device.name || 'Сканер'));
@@ -1891,6 +1955,7 @@ var ble = {
         bleSetStatus('⚠️ ' + (e.message || e), false);
       }
       if (btn) { btn.textContent = '🔗 Подключить сканер'; btn.disabled = false; }
+      this.updateUI();
     }
   },
 
@@ -1972,11 +2037,14 @@ var ble = {
     var name = this.device && this.device.name ? ': ' + this.device.name : '';
     bleSetStatus(this.connected ? ('Подключён' + name) : 'Не подключён', this.connected);
 
-    // Имя устройства
+    // Имя устройства / сохранённое устройство
     var devEl = document.getElementById('bleDeviceName');
     if (devEl) {
       if (this.connected && this.device && this.device.name) {
         devEl.textContent = '📟 ' + this.device.name;
+        devEl.style.display = '';
+      } else if (!this.connected && this.savedDeviceName) {
+        devEl.textContent = '💾 Последний: ' + this.savedDeviceName;
         devEl.style.display = '';
       } else {
         devEl.style.display = 'none';
@@ -1986,8 +2054,47 @@ var ble = {
     // Кнопки
     var cb = document.getElementById('bleConnectBtn');
     var db = document.getElementById('bleDisconnectBtn');
-    if (cb) { cb.style.display = this.connected ? 'none' : ''; cb.textContent = '🔗 Подключить сканер'; cb.disabled = false; }
+    var fb = document.getElementById('bleForgetBtn');
+    var ob = document.getElementById('bleOtherBtn');
+    if (cb) {
+      cb.style.display = this.connected ? 'none' : '';
+      // Если есть сохранённое устройство — показываем его имя на кнопке
+      cb.textContent = (!this.connected && this.savedDeviceName)
+        ? '🔗 Подключить ' + this.savedDeviceName
+        : '🔗 Подключить сканер';
+      cb.disabled = false;
+    }
     if (db) { db.style.display = this.connected ? '' : 'none'; }
+    // Кнопка «Забыть» — только если не подключён и есть сохранённое
+    if (fb) { fb.style.display = (!this.connected && this.savedDeviceName) ? '' : 'none'; }
+    // Кнопка «Выбрать другой» — только если не подключён и есть сохранённое
+    if (ob) { ob.style.display = (!this.connected && this.savedDeviceName) ? '' : 'none'; }
+  },
+
+  // Подключиться вручную (всегда показывает диалог выбора, игнорирует сохранённое)
+  connectManual: async function() {
+    if (!navigator.bluetooth) return;
+    var btn = document.getElementById('bleOtherBtn');
+    if (btn) { btn.textContent = '⏳ Выберите...'; btn.disabled = true; }
+
+    try {
+      this.device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: this.SERVICES
+      });
+      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      this.server = await this.device.gatt.connect();
+      await this.setupNotifications();
+      this.connected = true;
+      this.saveDevice();
+      this.updateUI();
+      closeBlePanel();
+      bleToast('🔗 Подключён: ' + (this.device.name || 'Сканер'));
+    } catch(e) {
+      if (e.name !== 'NotFoundError') bleSetStatus('⚠️ ' + (e.message || e), false);
+      if (btn) { btn.textContent = '🔍 Выбрать другой сканер'; btn.disabled = false; }
+      this.updateUI();
+    }
   }
 };
 
@@ -2050,7 +2157,14 @@ window.onload = function() {
   loadSettings();
   loadScCfg();
   preloadAllData();
-  ble.updateUI(); // инициализируем BLE UI
+  ble.loadSavedDevice();
+  ble.updateUI();
+  // Пробуем авто-переподключение к сохранённому устройству
+  if (ble.savedDeviceName) {
+    ble.reconnect().then(function(ok) {
+      if (ok) bleToast('🔗 Автоподключение: ' + ble.savedDeviceName);
+    });
+  }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
   }
@@ -2245,10 +2359,13 @@ window.onload = function() {
     </div>
     <div class="ble-device-name" id="bleDeviceName" style="display:none"></div>
     <button id="bleConnectBtn" class="btn btn-primary" onclick="bleConnect()" style="margin-top:4px">🔗 Подключить сканер</button>
+    <button id="bleOtherBtn" class="btn btn-secondary" onclick="ble.connectManual()" style="display:none;margin-top:8px">🔍 Выбрать другой сканер</button>
     <button id="bleDisconnectBtn" class="btn btn-danger" onclick="bleDisconnect()" style="display:none;margin-top:10px">⛔ Отключить</button>
+    <button id="bleForgetBtn" class="btn btn-secondary" onclick="ble.forgetDevice()" style="display:none;margin-top:8px;font-size:14px;color:#9ca3af">🗑 Забыть устройство</button>
     <div class="ble-note">
       <b>iOS:</b> Используйте браузер <b>Bluefy</b> — он поддерживает Web Bluetooth.<br>
-      <b>Android:</b> Chrome или Edge.
+      <b>Android:</b> Chrome или Edge.<br>
+      <b>💡</b> После первого подключения устройство запоминается — при следующем нажатии подключится автоматически.
     </div>
     <button class="btn btn-secondary" onclick="closeBlePanel()" style="margin-top:6px">Закрыть</button>
   </div>
