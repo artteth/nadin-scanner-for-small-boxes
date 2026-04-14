@@ -355,7 +355,27 @@ function getAllBarcodes() {
       };
     });
 
-    return { barcodes: result };
+    // 5. Список типов упаковки из листа "ФОРМУЛЫ/выпадающие списки", столбец AD, строки 3+
+    const packTypes = [];
+    try {
+      const formulaSheet = ss.getSheetByName('ФОРМУЛЫ/выпадающие списки');
+      if (formulaSheet) {
+        const lastFormulaRow = formulaSheet.getLastRow();
+        if (lastFormulaRow >= 3) {
+          const numFormulaRows = lastFormulaRow - 2;
+          // AD = колонка 30 (A=1, ..., Z=26, AA=27, AB=28, AC=29, AD=30)
+          const formulaData = formulaSheet.getRange(3, 30, numFormulaRows, 1).getValues();
+          formulaData.forEach(row => {
+            const val = row[0];
+            if (val && val.toString().trim()) packTypes.push(val.toString().trim());
+          });
+        }
+      }
+    } catch(packErr) {
+      // Не критично — клиент использует фолбэк
+    }
+
+    return { barcodes: result, packTypes: packTypes };
   } catch(e) {
     return { error: e.message };
   }

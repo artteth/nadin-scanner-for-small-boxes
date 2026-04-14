@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v125</title>
+  <title>Сканер упаковки v126</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -115,6 +115,7 @@
       font-weight: 600;
       cursor: pointer;
       margin-top: clamp(8px, 2vw, 14px);
+      touch-action: manipulation;
     }
     .btn-primary { background: #15803d; color: white; margin-top: clamp(12px, 3vw, 24px); }
     .btn-primary:active { background: #166534; }
@@ -178,6 +179,7 @@
       cursor: pointer;
       margin-bottom: 10px;
       transition: all 0.15s;
+      touch-action: manipulation;
     }
     .pack-btn:hover { border-color: #15803d; background: #f0fdf4; }
     .pack-btn:active { transform: scale(0.97); }
@@ -497,6 +499,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      touch-action: manipulation;
     }
     .btn-scan-cfg:active { background: #e5e7eb; }
 
@@ -774,10 +777,7 @@
     <p class="select-label">Выберите тип упаковки</p>
     <p class="select-model" id="selectModel"></p>
     <div id="packButtons">
-      <button class="pack-btn" onclick="selectPack(this,'коробка мелкая старая пробная')">коробка мелкая старая пробная</button>
-      <button class="pack-btn" onclick="selectPack(this,'коробка S 28x19.5x30')">коробка S 28x19.5x30</button>
-      <button class="pack-btn" onclick="selectPack(this,'пакет S 30x20')">пакет S 30x20</button>
-      <button class="pack-btn" onclick="selectPack(this,'пакет L 60x30')">пакет L 60x30</button>
+      <!-- Кнопки заполняются динамически из Google Таблицы -->
     </div>
     <button class="btn btn-primary" id="btnSavePack" onclick="onSave()" style="margin-top:16px;opacity:0.4;pointer-events:none">Сохранить</button>
     <button class="btn btn-secondary" onclick="goIdle()">Отмена</button>
@@ -999,7 +999,12 @@ function preloadAllData() {
         showError('Ошибка загрузки: ' + result.error);
       } else {
         barcodeToModel = result.barcodes || {};
-        buildDynamicPackTypes(); // собираем реальные типы упаковки из таблицы
+        // Используем список типов упаковки с сервера (лист "ФОРМУЛЫ/выпадающие списки", столбец AD)
+        if (result.packTypes && result.packTypes.length > 0) {
+          serverPackTypes = result.packTypes;
+        }
+        buildDynamicPackTypes();
+        renderPackButtons();
         dataLoaded = true;
         document.getElementById('barcodeInput').focus();
       }
@@ -1240,21 +1245,35 @@ function showError(msg) {
 // ── Таблица всех изделий ──
 var tableActiveType = '';
 var tableChangedModels = new Set();
-// Список типов упаковки — заполняется динамически из загруженных данных
-// Захардкоженные значения служат запасным вариантом если в таблице ничего нет
+// Список типов упаковки — основной список загружается с сервера (лист "ФОРМУЛЫ/выпадающие списки", столбец AD)
+// Захардкоженные значения служат запасным вариантом если с сервера ничего не пришло
 var TABLE_PACK_TYPES_DEFAULT = ['коробка мелкая старая пробная','коробка S 28x19.5x30','пакет S 30x20','пакет L 60x30'];
 var TABLE_PACK_TYPES = TABLE_PACK_TYPES_DEFAULT.slice();
+var serverPackTypes = []; // список с сервера (лист "ФОРМУЛЫ/выпадающие списки", AD)
 
-// Собирает уникальные типы упаковки из загруженных данных barcodeToModel
+// Собирает список типов упаковки: сначала с сервера, потом из данных, потом дефолт
 function buildDynamicPackTypes() {
+  if (serverPackTypes.length > 0) {
+    TABLE_PACK_TYPES = serverPackTypes.slice();
+    return;
+  }
   var types = new Set();
-  // Берём всё что реально есть в Google Таблице
   Object.values(barcodeToModel).forEach(function(item) {
     if (item.packType) types.add(item.packType);
   });
-  // Добавляем стандартные варианты (чтобы можно было выбрать и их)
   TABLE_PACK_TYPES_DEFAULT.forEach(function(t) { types.add(t); });
   TABLE_PACK_TYPES = Array.from(types).sort();
+}
+
+// Отрисовывает кнопки выбора типа упаковки в основном потоке сканирования
+function renderPackButtons() {
+  var container = document.getElementById('packButtons');
+  if (!container) return;
+  var types = TABLE_PACK_TYPES.length > 0 ? TABLE_PACK_TYPES : TABLE_PACK_TYPES_DEFAULT;
+  container.innerHTML = types.map(function(t) {
+    var escaped = esc(t);
+    return '<button class="pack-btn" onclick="selectPack(this,' + JSON.stringify(t) + ')">' + escaped + '</button>';
+  }).join('');
 }
 
 function openTableView() {
