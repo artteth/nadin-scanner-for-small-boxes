@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v123</title>
+  <title>Сканер упаковки v124</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -691,7 +691,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v123</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v124</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -1894,17 +1894,47 @@ var ble = {
       if (!found) return false;
 
       this.device = found;
-      this.device.addEventListener('gattserverdisconnected', function() {
-        ble.onDisconnect();
+      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+
+      // Вариант 1: прямое подключение (работает если устройство в зоне и не спит)
+      try {
+        this.server = await found.gatt.connect();
+        await this.setupNotifications();
+        this.connected = true;
+        this.saveDevice();
+        this.updateUI();
+        return true;
+      } catch(directErr) {}
+
+      // Вариант 2: ждём рекламу через watchAdvertisements(), потом подключаемся
+      // (работает для спаренных устройств, которые не отвечают на прямой connect)
+      if (!found.watchAdvertisements) return false;
+
+      return await new Promise(function(resolve) {
+        var timer = setTimeout(function() {
+          try { found.stopWatchingAdvertisements(); } catch(e) {}
+          resolve(false);
+        }, 8000); // ждём до 8 секунд
+
+        found.addEventListener('advertisementreceived', async function handler() {
+          found.removeEventListener('advertisementreceived', handler);
+          clearTimeout(timer);
+          try { found.stopWatchingAdvertisements(); } catch(e) {}
+          try {
+            ble.server = await found.gatt.connect();
+            await ble.setupNotifications();
+            ble.connected = true;
+            ble.saveDevice();
+            ble.updateUI();
+            resolve(true);
+          } catch(e) { resolve(false); }
+        });
+
+        found.watchAdvertisements().catch(function() {
+          clearTimeout(timer);
+          resolve(false);
+        });
       });
-
-      this.server = await found.gatt.connect();
-      await this.setupNotifications();
-
-      this.connected = true;
-      this.saveDevice();
-      this.updateUI();
-      return true;
     } catch(e) {
       return false;
     }
@@ -1913,13 +1943,13 @@ var ble = {
   // ── Основное подключение ──
   connect: async function() {
     if (!navigator.bluetooth) {
-      bleSetStatus('⚠️ Web Bluetooth не поддерживается.<br>iOS → Bluefy, Android → Chrome/Edge.', false);
+      bleSetStatus('⚠️ Web Bluetooth не поддерживается.<br>iOS → Bluefy, Android → Chrome/Edge.');
       return;
     }
     var btn = document.getElementById('bleConnectBtn');
     if (btn) { btn.textContent = '⏳ Подключение...'; btn.disabled = true; }
 
-    // Сначала пробуем авто-переподключение к сохранённому устройству (без диалога)
+    // Шаг 1: пробуем авто-переподключение через getDevices() (без диалога)
     var reconnected = await this.reconnect();
     if (reconnected) {
       closeBlePanel();
@@ -1927,34 +1957,35 @@ var ble = {
       return;
     }
 
-    // Не удалось — показываем стандартный диалог выбора
+    // Шаг 2: диалог выбора устройства
+    // Ключевой момент: если есть сохранённое имя — используем фильтр по имени.
+    // filters:[{name}] показывает в пикере ВКЛЮЧАЯ уже спаренные с ОС устройства,
+    // тогда как acceptAllDevices их может не показывать.
     if (btn) { btn.textContent = '⏳ Выберите устройство...'; }
-
     try {
-      this.device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: this.SERVICES
-      });
+      var params = this.savedDeviceName
+        ? { filters: [{ name: this.savedDeviceName }], optionalServices: this.SERVICES }
+        : { acceptAllDevices: true, optionalServices: this.SERVICES };
+
+      this.device = await navigator.bluetooth.requestDevice(params);
 
       if (btn) { btn.textContent = '⏳ Подключение...'; }
-
-      this.device.addEventListener('gattserverdisconnected', function() {
-        ble.onDisconnect();
-      });
-
+      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
       this.server = await this.device.gatt.connect();
       await this.setupNotifications();
-
       this.connected = true;
-      this.saveDevice(); // запоминаем для авто-переподключения
+      this.saveDevice();
       this.updateUI();
       closeBlePanel();
       bleToast('🔗 Подключён: ' + (this.device.name || 'Сканер'));
     } catch(e) {
-      if (e.name !== 'NotFoundError') {       // NotFoundError = пользователь отменил выбор
-        bleSetStatus('⚠️ ' + (e.message || e), false);
+      if (e.name === 'NotFoundError' && this.savedDeviceName) {
+        // Ничего не нашлось с именем — подсказываем
+        bleSetStatus('«' + this.savedDeviceName + '» не найден рядом.<br>Попробуйте «Выбрать другой сканер» или убедитесь, что сканер включён.');
+      } else if (e.name !== 'NotFoundError') {
+        bleSetStatus('⚠️ ' + (e.message || e));
       }
-      if (btn) { btn.textContent = '🔗 Подключить сканер'; btn.disabled = false; }
+      if (btn) { btn.textContent = '🔗 Подключить ' + (this.savedDeviceName || 'сканер'); btn.disabled = false; }
       this.updateUI();
     }
   },
