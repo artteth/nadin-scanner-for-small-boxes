@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v128</title>
+  <title>Сканер упаковки v129</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -69,7 +69,7 @@
       margin: 0;
       text-align: center;
       line-height: 1.2;
-      padding-right: clamp(28px, 7vw, 44px);
+      padding-right: clamp(60px, 14vw, 88px); /* место под две кнопки справа */
     }
     .settings-btn {
       position: absolute;
@@ -83,6 +83,33 @@
       padding: 2px 4px;
       color: #9ca3af;
       line-height: 1;
+      touch-action: manipulation;
+    }
+    .refresh-btn {
+      position: absolute;
+      right: clamp(30px, 7.5vw, 46px); /* левее шестерёнки */
+      top: 50%;
+      transform: translateY(-50%);
+      width: clamp(26px, 6vw, 36px);
+      height: clamp(26px, 6vw, 36px);
+      border-radius: 50%;
+      background: #f3f4f6;
+      border: 1.5px solid #e5e7eb;
+      font-size: clamp(13px, 3.2vw, 18px);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      touch-action: manipulation;
+      transition: background 0.15s;
+      line-height: 1;
+    }
+    .refresh-btn:active { background: #d1d5db; }
+    .refresh-btn.spinning { animation: refreshSpin 0.7s linear infinite; }
+    @keyframes refreshSpin {
+      from { transform: translateY(-50%) rotate(0deg); }
+      to   { transform: translateY(-50%) rotate(360deg); }
     }
 
     /* ── IDLE состояние ── */
@@ -713,7 +740,8 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v128</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v129</h1>
+    <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -823,6 +851,9 @@ var settings = {
   photoMaxHeight: 300,
   timerPacked: 10,
   timerError: 5,
+  autoRefresh: false,
+  autoRefreshInterval: 5, // минут
+  refreshAfterSave: true,
 };
 var SETTINGS_KEY = 'scannerSettings_v1';
 
@@ -842,6 +873,7 @@ function applySettings() {
   r.style.setProperty('--pack-color', settings.packTypeColor);
   r.style.setProperty('--pack-font-weight', settings.packTypeBold ? '700' : '400');
   r.style.setProperty('--photo-max-height', settings.photoMaxHeight + 'px');
+  startAutoRefresh(); // перезапускаем таймер с актуальными настройками
 }
 
 function syncSettingsUI() {
@@ -856,6 +888,11 @@ function syncSettingsUI() {
   document.getElementById('setTimer1Val').textContent = settings.timerPacked;
   document.getElementById('setTimer2').value = settings.timerError;
   document.getElementById('setTimer2Val').textContent = settings.timerError;
+  document.getElementById('setAutoRefresh').checked = !!settings.autoRefresh;
+  document.getElementById('setAutoRefreshInterval').value = settings.autoRefreshInterval || 5;
+  document.getElementById('setAutoRefreshIntervalVal').textContent = settings.autoRefreshInterval || 5;
+  document.getElementById('setRefreshAfterSave').checked = settings.refreshAfterSave !== false;
+  syncRefreshIntervalVisibility();
   updateSettingsPreview(settings);
 }
 
@@ -902,7 +939,15 @@ function readSettingsFromUI() {
     photoMaxHeight: parseInt(document.getElementById('setPhotoSize').value),
     timerPacked: parseInt(document.getElementById('setTimer1').value),
     timerError: parseInt(document.getElementById('setTimer2').value),
+    autoRefresh: document.getElementById('setAutoRefresh').checked,
+    autoRefreshInterval: parseInt(document.getElementById('setAutoRefreshInterval').value),
+    refreshAfterSave: document.getElementById('setRefreshAfterSave').checked,
   };
+}
+
+function syncRefreshIntervalVisibility() {
+  var wrap = document.getElementById('setAutoRefreshIntervalWrap');
+  if (wrap) wrap.style.display = document.getElementById('setAutoRefresh').checked ? '' : 'none';
 }
 
 function saveSettings() {
@@ -1017,11 +1062,43 @@ function preloadAllData() {
 function showPreloader(show) {
   const el = document.getElementById('preloader');
   if (!el) return;
-  if (show) {
-    el.classList.remove('hidden');
-  } else {
-    el.classList.add('hidden');
-  }
+  if (show) el.classList.remove('hidden');
+  else el.classList.add('hidden');
+}
+
+// ── Фоновое обновление данных (без блокировки UI) ──
+var _refreshRunning = false;
+var _autoRefreshTimer = null;
+
+function refreshData() {
+  if (_refreshRunning) return;
+  _refreshRunning = true;
+  var btn = document.getElementById('refreshBtn');
+  if (btn) btn.classList.add('spinning');
+
+  apiCall('getAllBarcodes').then(function(result) {
+    _refreshRunning = false;
+    if (btn) btn.classList.remove('spinning');
+    if (result && !result.error) {
+      barcodeToModel = result.barcodes || {};
+      if (result.packTypes && result.packTypes.length > 0) {
+        serverPackTypes = result.packTypes;
+        buildDynamicPackTypes();
+        renderPackButtons();
+      }
+      dataLoaded = true;
+      // Если открыта таблица — перерисовываем её тоже
+      var tbl = document.getElementById('tableView');
+      if (tbl && tbl.classList.contains('active')) renderTableView();
+    }
+  });
+}
+
+function startAutoRefresh() {
+  if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+  if (!settings.autoRefresh) return;
+  var ms = (settings.autoRefreshInterval || 5) * 60 * 1000;
+  _autoRefreshTimer = setInterval(refreshData, ms);
 }
 
 function onSearch() {
@@ -1228,7 +1305,7 @@ function onSave() {
         showError(result.error || 'Ошибка сохранения');
         return;
       }
-      // Обновляем предзагруженные данные — галочка + тип упаковки
+      // Обновляем локальный кэш сразу
       Object.keys(barcodeToModel).forEach(function(bc) {
         if (barcodeToModel[bc].model === currentModel) {
           barcodeToModel[bc].repacked = true;
@@ -1237,6 +1314,8 @@ function onSave() {
       });
       showState('stateSuccess');
       setTimeout(goIdle, 1200);
+      // Фоновое обновление всей таблицы (если включено в настройках)
+      if (settings.refreshAfterSave) setTimeout(refreshData, 1500);
     });
 }
 
@@ -1459,6 +1538,8 @@ function saveTableItem(model, btn) {
         tableChangedModels.delete(model);
         var tr = document.querySelector('#tblBody tr[data-model="' + esc(model) + '"]');
         if (tr) tblRefreshRow(tr, model);
+        // Фоновое обновление всей таблицы (если включено)
+        if (settings.refreshAfterSave) setTimeout(refreshData, 800);
       } else {
         if (btn) { btn.textContent = 'Записать'; btn.disabled = false; }
         alert('Ошибка: ' + ((result && result.error) || 'неизвестно'));
@@ -2303,6 +2384,28 @@ window.onload = function() {
     <div class="settings-group">
       <div class="settings-label">Таймер ошибки: <b id="setTimer2Val">5</b> сек</div>
       <input type="range" id="setTimer2" class="settings-range" min="2" max="30" value="5" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🔄 Синхронизация данных</div>
+
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setAutoRefresh" onchange="syncRefreshIntervalVisibility()">
+        Автообновление по таймеру
+      </label>
+      <div id="setAutoRefreshIntervalWrap" style="margin-top:8px;display:none">
+        <div class="settings-label">Интервал: <b id="setAutoRefreshIntervalVal">5</b> мин</div>
+        <input type="range" id="setAutoRefreshInterval" class="settings-range" min="1" max="30" value="5"
+          oninput="document.getElementById('setAutoRefreshIntervalVal').textContent=this.value">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setRefreshAfterSave" checked>
+        Обновлять данные после каждой записи
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">После сохранения в фоне загружаются свежие данные из таблицы</div>
     </div>
 
     <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
