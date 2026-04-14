@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v124</title>
+  <title>Сканер упаковки v125</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -660,6 +660,22 @@
       margin: 14px 0;
       line-height: 1.5;
     }
+    .ble-warn {
+      background: #fef3c7;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 13px;
+      color: #92400e;
+      margin: 10px 0;
+      line-height: 1.6;
+    }
+    .ble-warn b { color: #7c2d12; }
+    .ble-steps {
+      margin: 6px 0 0 0;
+      padding-left: 18px;
+      color: #92400e;
+    }
+    .ble-steps li { margin-bottom: 3px; }
 
     /* ── BLE тост ── */
     .ble-toast {
@@ -691,7 +707,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v124</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v125</h1>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
 
@@ -2393,10 +2409,38 @@ window.onload = function() {
     <button id="bleOtherBtn" class="btn btn-secondary" onclick="ble.connectManual()" style="display:none;margin-top:8px">🔍 Выбрать другой сканер</button>
     <button id="bleDisconnectBtn" class="btn btn-danger" onclick="bleDisconnect()" style="display:none;margin-top:10px">⛔ Отключить</button>
     <button id="bleForgetBtn" class="btn btn-secondary" onclick="ble.forgetDevice()" style="display:none;margin-top:8px;font-size:14px;color:#9ca3af">🗑 Забыть устройство</button>
+
+    <div class="ble-warn">
+      <b>⚠️ Важно для iOS (Bluefy)</b><br>
+      Когда iPad показывает диалог:<br>
+      <i>«Запрос на создание пары по Bluetooth»</i><br>
+      → нажимайте <b>«Отменить»</b>, НЕ «Создать пару».<br><br>
+      Если нажать «Создать пару» — устройство привязывается к iPad и
+      <b>перестаёт отображаться в списке поиска</b>.
+    </div>
+
+    <div id="blePairedHelp" style="display:none">
+      <div class="ble-warn">
+        <b>🔧 Сканер уже привязан к iPad?</b>
+        <ol class="ble-steps">
+          <li>Откройте <b>Настройки iPad → Bluetooth</b></li>
+          <li>Найдите ваш сканер в списке</li>
+          <li>Нажмите ⓘ рядом с именем</li>
+          <li>Выберите <b>«Забыть это устройство»</b></li>
+          <li>Вернитесь сюда и нажмите «Подключить»</li>
+          <li>Когда iPad спросит «Создать пару» → <b>Отменить</b></li>
+        </ol>
+      </div>
+    </div>
+
+    <button id="blePairedHelpBtn" class="btn btn-secondary"
+      onclick="document.getElementById('blePairedHelp').style.display=''; document.getElementById('blePairedHelpBtn').style.display='none';"
+      style="margin-top:6px;font-size:13px">
+      ❓ Сканер не виден в списке
+    </button>
+
     <div class="ble-note">
-      <b>iOS:</b> Используйте браузер <b>Bluefy</b> — он поддерживает Web Bluetooth.<br>
-      <b>Android:</b> Chrome или Edge.<br>
-      <b>💡</b> После первого подключения устройство запоминается — при следующем нажатии подключится автоматически.
+      <b>iOS:</b> браузер <b>Bluefy</b>&nbsp;&nbsp;|&nbsp;&nbsp;<b>Android:</b> Chrome / Edge
     </div>
     <button class="btn btn-secondary" onclick="closeBlePanel()" style="margin-top:6px">Закрыть</button>
   </div>
