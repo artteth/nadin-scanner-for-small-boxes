@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v129</title>
+  <title>Сканер упаковки v130</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -119,6 +119,25 @@
       margin: 0 0 clamp(6px, 1.5vw, 12px);
       text-align: center;
     }
+    .search-row {
+      display: flex;
+      gap: clamp(6px, 1.5vw, 10px);
+      align-items: stretch;
+    }
+    .search-row #barcodeInput { flex: 1; min-width: 0; }
+    .btn-find {
+      width: clamp(56px, 15vw, 100px);
+      flex-shrink: 0;
+      background: #15803d;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: clamp(14px, 3.5vw, 22px);
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .btn-find:active { background: #166534; transform: scale(0.96); }
     #barcodeInput {
       width: 100%;
       height: clamp(56px, 15vw, 112px);
@@ -732,6 +751,68 @@
     }
     .ble-toast.show { transform: translateX(-50%) translateY(0); }
 
+    /* ── История сканирований ── */
+    .history-section {
+      margin-top: clamp(10px, 2.5vw, 18px);
+      border-top: 1px solid #e5e7eb;
+      padding-top: clamp(8px, 2vw, 14px);
+    }
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .history-title {
+      font-size: clamp(12px, 3vw, 14px);
+      color: #9ca3af;
+      font-weight: 600;
+    }
+    .history-clear {
+      background: none; border: none;
+      font-size: 12px; color: #9ca3af;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .history-clear:active { color: #dc2626; }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #f9fafb;
+      font-size: clamp(12px, 3vw, 14px);
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-model {
+      font-family: monospace;
+      font-weight: 600;
+      color: #111827;
+      flex-shrink: 0;
+    }
+    .history-pack {
+      color: #6b7280;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .history-status { flex-shrink: 0; font-size: 16px; }
+    .history-retry {
+      flex-shrink: 0;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 3px 8px;
+      cursor: pointer;
+      color: #92400e;
+      font-weight: 600;
+      touch-action: manipulation;
+    }
+    .history-retry:active { background: #fde68a; }
+    .history-retry.retrying { opacity: 0.5; pointer-events: none; }
+
     /* Утилиты */
     .hidden { display: none; }
   </style>
@@ -740,7 +821,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v129</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v130</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -765,21 +846,32 @@
 
   <div id="stateIdle">
     <p class="barcode-label">Введите штрих-код или номер модели</p>
-    <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
-    <button class="btn btn-primary" onclick="onSearch()">Найти</button>
-    <div class="scan-btn-row">
+    <div class="search-row">
+      <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="btn-find" onclick="onSearch()">Найти</button>
+    </div>
+    <div class="scan-btn-row" id="scanRowBasic">
       <button class="btn-scan-cfg" onclick="openScannerCfg('basic')" title="Настройки">⚙️</button>
       <button class="btn btn-secondary" onclick="openCameraMode('basic')">📷 Сканировать камерой</button>
     </div>
-    <div class="scan-btn-row">
+    <div class="scan-btn-row" id="scanRowAdvanced">
       <button class="btn-scan-cfg" onclick="openScannerCfg('advanced')" title="Настройки">⚙️</button>
       <button class="btn btn-secondary" onclick="openCameraMode('advanced')">🔬 Расширенный сканер</button>
     </div>
-    <div class="scan-btn-row">
+    <div class="scan-btn-row" id="scanRowScanbot">
       <button class="btn-scan-cfg" onclick="openScannerCfg('scanbot')" title="Настройки">⚙️</button>
       <button class="btn btn-secondary" onclick="openCameraMode('scanbot')">📱 Сканировать ScanBot</button>
     </div>
     <button class="btn btn-secondary" onclick="openTableView()">📋 Все изделия</button>
+
+    <!-- История сканирований -->
+    <div class="history-section" id="historySection" style="display:none">
+      <div class="history-header">
+        <span class="history-title">📋 История</span>
+        <button class="history-clear" onclick="clearHistory()">Очистить</button>
+      </div>
+      <div id="historyList"></div>
+    </div>
   </div>
 
   <!-- ALREADY_PACKED -->
@@ -852,8 +944,12 @@ var settings = {
   timerPacked: 10,
   timerError: 5,
   autoRefresh: false,
-  autoRefreshInterval: 5, // минут
+  autoRefreshInterval: 5,
   refreshAfterSave: true,
+  showBasicScanner: true,
+  showAdvancedScanner: true,
+  showScanbotScanner: true,
+  historyMaxItems: 10,
 };
 var SETTINGS_KEY = 'scannerSettings_v1';
 
@@ -873,7 +969,14 @@ function applySettings() {
   r.style.setProperty('--pack-color', settings.packTypeColor);
   r.style.setProperty('--pack-font-weight', settings.packTypeBold ? '700' : '400');
   r.style.setProperty('--photo-max-height', settings.photoMaxHeight + 'px');
-  startAutoRefresh(); // перезапускаем таймер с актуальными настройками
+  // Видимость кнопок сканеров
+  var rb = document.getElementById('scanRowBasic');
+  var ra = document.getElementById('scanRowAdvanced');
+  var rs = document.getElementById('scanRowScanbot');
+  if (rb) rb.style.display = settings.showBasicScanner ? '' : 'none';
+  if (ra) ra.style.display = settings.showAdvancedScanner ? '' : 'none';
+  if (rs) rs.style.display = settings.showScanbotScanner ? '' : 'none';
+  startAutoRefresh();
 }
 
 function syncSettingsUI() {
@@ -888,6 +991,10 @@ function syncSettingsUI() {
   document.getElementById('setTimer1Val').textContent = settings.timerPacked;
   document.getElementById('setTimer2').value = settings.timerError;
   document.getElementById('setTimer2Val').textContent = settings.timerError;
+  document.getElementById('setShowBasic').checked = settings.showBasicScanner !== false;
+  document.getElementById('setShowAdvanced').checked = settings.showAdvancedScanner !== false;
+  document.getElementById('setShowScanbot').checked = settings.showScanbotScanner !== false;
+  document.getElementById('setHistoryMax').value = settings.historyMaxItems || 10;
   document.getElementById('setAutoRefresh').checked = !!settings.autoRefresh;
   document.getElementById('setAutoRefreshInterval').value = settings.autoRefreshInterval || 5;
   document.getElementById('setAutoRefreshIntervalVal').textContent = settings.autoRefreshInterval || 5;
@@ -939,6 +1046,10 @@ function readSettingsFromUI() {
     photoMaxHeight: parseInt(document.getElementById('setPhotoSize').value),
     timerPacked: parseInt(document.getElementById('setTimer1').value),
     timerError: parseInt(document.getElementById('setTimer2').value),
+    showBasicScanner: document.getElementById('setShowBasic').checked,
+    showAdvancedScanner: document.getElementById('setShowAdvanced').checked,
+    showScanbotScanner: document.getElementById('setShowScanbot').checked,
+    historyMaxItems: parseInt(document.getElementById('setHistoryMax').value) || 10,
     autoRefresh: document.getElementById('setAutoRefresh').checked,
     autoRefreshInterval: parseInt(document.getElementById('setAutoRefreshInterval').value),
     refreshAfterSave: document.getElementById('setRefreshAfterSave').checked,
@@ -1299,22 +1410,24 @@ function onSave() {
 
   showState('stateSaving');
 
-  apiCall('savePackaging', { model: currentModel, packType: packType })
+  var savedModel = currentModel;
+  apiCall('savePackaging', { model: savedModel, packType: packType })
     .then(function(result) {
       if (!result.success) {
+        addToHistory(savedModel, packType, 'error', result.error || 'Ошибка сохранения');
         showError(result.error || 'Ошибка сохранения');
         return;
       }
       // Обновляем локальный кэш сразу
       Object.keys(barcodeToModel).forEach(function(bc) {
-        if (barcodeToModel[bc].model === currentModel) {
+        if (barcodeToModel[bc].model === savedModel) {
           barcodeToModel[bc].repacked = true;
           barcodeToModel[bc].packType = packType;
         }
       });
+      addToHistory(savedModel, packType, 'success');
       showState('stateSuccess');
       setTimeout(goIdle, 1200);
-      // Фоновое обновление всей таблицы (если включено в настройках)
       if (settings.refreshAfterSave) setTimeout(refreshData, 1500);
     });
 }
@@ -1952,6 +2065,100 @@ function closePhotoFullscreen() {
 }
 
 // ═══════════════════════════════════════════════
+// ── История сканирований ──
+// ═══════════════════════════════════════════════
+
+var scanHistory = [];
+var HISTORY_KEY = 'scanHistory_v1';
+
+function loadHistory() {
+  try {
+    var s = localStorage.getItem(HISTORY_KEY);
+    if (s) scanHistory = JSON.parse(s);
+  } catch(e) { scanHistory = []; }
+  renderHistory();
+}
+
+function saveHistory() {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(scanHistory)); } catch(e) {}
+}
+
+function addToHistory(model, packType, status, errorMsg) {
+  scanHistory.unshift({
+    model: model,
+    packType: packType || '',
+    status: status, // 'success' | 'error'
+    error: errorMsg || '',
+    time: Date.now()
+  });
+  // Обрезаем до макс.
+  var max = settings.historyMaxItems || 10;
+  if (scanHistory.length > max) scanHistory.length = max;
+  saveHistory();
+  renderHistory();
+}
+
+function renderHistory() {
+  var section = document.getElementById('historySection');
+  var list = document.getElementById('historyList');
+  if (!section || !list) return;
+
+  var max = settings.historyMaxItems || 10;
+  var items = scanHistory.slice(0, max);
+
+  if (!items.length) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  list.innerHTML = items.map(function(h, i) {
+    var icon = h.status === 'success' ? '✅' : '❌';
+    var retryBtn = h.status === 'error'
+      ? ' <button class="history-retry" onclick="retryHistoryItem(' + i + ', this)">↻ Повторить</button>'
+      : '';
+    return '<div class="history-item">'
+      + '<span class="history-model">' + esc(h.model) + '</span>'
+      + '<span class="history-pack">' + esc(h.packType) + '</span>'
+      + '<span class="history-status">' + icon + '</span>'
+      + retryBtn
+      + '</div>';
+  }).join('');
+}
+
+function retryHistoryItem(index, btn) {
+  var item = scanHistory[index];
+  if (!item || item.status === 'success') return;
+  if (btn) { btn.classList.add('retrying'); btn.textContent = '⏳'; }
+
+  apiCall('savePackaging', { model: item.model, packType: item.packType })
+    .then(function(result) {
+      if (result && result.success) {
+        scanHistory[index].status = 'success';
+        scanHistory[index].error = '';
+        // Обновляем локальный кэш
+        Object.keys(barcodeToModel).forEach(function(bc) {
+          if (barcodeToModel[bc].model === item.model) {
+            barcodeToModel[bc].repacked = true;
+            barcodeToModel[bc].packType = item.packType;
+          }
+        });
+        if (settings.refreshAfterSave) setTimeout(refreshData, 800);
+      } else {
+        scanHistory[index].error = (result && result.error) || 'Ошибка';
+      }
+      saveHistory();
+      renderHistory();
+    });
+}
+
+function clearHistory() {
+  scanHistory = [];
+  saveHistory();
+  renderHistory();
+}
+
+// ═══════════════════════════════════════════════
 // ── BLE Сканер (глобальный) ──
 // ═══════════════════════════════════════════════
 
@@ -2310,6 +2517,7 @@ window.onload = function() {
   initTableEvents();
   loadSettings();
   loadScCfg();
+  loadHistory();
   preloadAllData();
   ble.loadSavedDevice();
   ble.updateUI();
@@ -2384,6 +2592,19 @@ window.onload = function() {
     <div class="settings-group">
       <div class="settings-label">Таймер ошибки: <b id="setTimer2Val">5</b> сек</div>
       <input type="range" id="setTimer2" class="settings-range" min="2" max="30" value="5" oninput="previewSettings()">
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">📷 Кнопки сканеров</div>
+      <label class="settings-checkbox-label"><input type="checkbox" id="setShowBasic" checked> 📷 Сканировать камерой</label>
+      <label class="settings-checkbox-label" style="margin-top:4px"><input type="checkbox" id="setShowAdvanced" checked> 🔬 Расширенный сканер</label>
+      <label class="settings-checkbox-label" style="margin-top:4px"><input type="checkbox" id="setShowScanbot" checked> 📱 Сканировать ScanBot</label>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">📋 История сканирований</div>
+      <label class="settings-checkbox-label">Максимум записей:</label>
+      <input type="number" id="setHistoryMax" class="settings-select" value="10" min="1" max="500" style="width:80px;text-align:center;margin-top:4px">
     </div>
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
