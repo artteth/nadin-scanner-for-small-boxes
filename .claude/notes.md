@@ -110,3 +110,7 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 | v127 | setTimeout вместо rAF + iOS :active хак + фото на мобиле |
 | v128 | Фикс renderPackButtons: JSON.stringify + esc() |
 | v129 | Кнопка ↻ + автообновление + фон. обновление после записи |
+| v130 | input+Найти в одну строку + скрытие кнопок сканера в настройках + история сканирований |
+| v131 | Кнопка «Найти» шире на 20% |
+| v132 | История: подтверждение очистки + фото-превью + order: model|photo|packType|status |
+| v133 | BLE Android fix: расширен список сервисов, задержка 600ms, per-UUID fallback, диагностический лог |

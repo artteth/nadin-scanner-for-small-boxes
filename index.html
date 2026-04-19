@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v132</title>
+  <title>Сканер упаковки v133</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -729,6 +729,28 @@
     }
     .ble-steps li { margin-bottom: 3px; }
 
+    /* ── BLE диагностика ── */
+    .ble-diag-box {
+      background: #0b1220;
+      color: #d1fae5;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      max-height: 260px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .ble-diag-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .ble-diag-row .btn { font-size: 13px; padding: 8px 10px; flex: 1; }
+
     /* ── BLE тост ── */
     .ble-toast {
       position: fixed;
@@ -832,7 +854,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v132</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v133</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -2194,21 +2216,69 @@ var ble = {
   savedDeviceName: '', // имя последнего устройства (из localStorage)
   BLE_DEV_KEY: 'bleLastDevice_v1',
 
-  // UUIDs сервисов — охватывают большинство BLE-сканеров
+  // UUIDs сервисов — охватывают большинство BLE-сканеров.
+  // ВАЖНО: Android Chrome строго фильтрует getPrimaryServices() по этому списку.
+  // Если сервис не в optionalServices — он просто не будет виден, notify не подпишется.
   SERVICES: [
-    '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART (NUS) — самый распространённый
+    // Nordic UART (NUS) — самый распространённый (Eyoyo, Inateck, Netum и др.)
+    '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
     '6e400002-b5a3-f393-e0a9-e50e24dcca9e', // NUS TX
     '6e400003-b5a3-f393-e0a9-e50e24dcca9e', // NUS RX
-    '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 (распространённые китайские сканеры)
-    '0000ffe1-0000-1000-8000-00805f9b34fb', // HM-10 characteristic
-    '0000dfb0-0000-1000-8000-00805f9b34fb', // Zebra, Honeywell и др.
-    '49535343-fe7d-4ae5-8fa9-9fafd205e455', // RSC Service
-    '0000fff0-0000-1000-8000-00805f9b34fb', // TI / некоторые Китайские
+    // HM-10 / CC2541 — дешёвые китайские модули
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000ffe1-0000-1000-8000-00805f9b34fb',
+    '0000ffe2-0000-1000-8000-00805f9b34fb',
+    '0000ffe3-0000-1000-8000-00805f9b34fb',
+    // Zebra, Honeywell, BGX (Silabs)
+    '0000dfb0-0000-1000-8000-00805f9b34fb',
+    '0000dfb1-0000-1000-8000-00805f9b34fb',
+    '0000dfb2-0000-1000-8000-00805f9b34fb',
+    // Microchip ISSC / Transparent UART (Newland, Generalscan)
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+    '49535343-1e4d-4bd9-ba61-23c647249616', // ISSC TX
+    '49535343-8841-43f4-a8d4-ecbe34729bb3', // ISSC RX
+    '49535343-4c8a-39b3-2f49-511cff073b7e',
+    '49535343-aca3-481c-91ec-d85e28a60318',
+    // TI SimpleLink / распространённые китайские сканеры
+    '0000fff0-0000-1000-8000-00805f9b34fb',
     '0000fff1-0000-1000-8000-00805f9b34fb',
-    'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Silabs
+    '0000fff2-0000-1000-8000-00805f9b34fb',
+    '0000fff3-0000-1000-8000-00805f9b34fb',
+    '0000fff4-0000-1000-8000-00805f9b34fb',
+    '0000fff5-0000-1000-8000-00805f9b34fb',
+    '0000fff6-0000-1000-8000-00805f9b34fb',
+    // Silabs BGX13
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+    'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
+    // Roving Networks / Microchip RN4870/RN4871
+    '49535343-c9d0-cc83-a44a-6fe238d06d33',
+    // Telit serial
+    '0000fefb-0000-1000-8000-00805f9b34fb',
+    // Symbol / Zebra SSI
+    '453a1000-63b1-c3d4-4a5c-87e5b40a74a1',
+    '453a1001-63b1-c3d4-4a5c-87e5b40a74a1',
+    // Generic шаблонные UUID для некоторых сканеров (NetumC/Eyoyo и тп)
+    '0000fee0-0000-1000-8000-00805f9b34fb',
+    '0000fee1-0000-1000-8000-00805f9b34fb',
+    '0000fee7-0000-1000-8000-00805f9b34fb',
+    '0000fee8-0000-1000-8000-00805f9b34fb',
+    '0000fee9-0000-1000-8000-00805f9b34fb',
+    '0000feea-0000-1000-8000-00805f9b34fb',
+    // Standard Services. HID (0x1812) и Generic Access/Attribute (0x1800/0x1801)
+    // в BLE-блоклисте Chrome — не включаем (вызовут SecurityError).
     '0000180a-0000-1000-8000-00805f9b34fb', // Device Information
-    '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+    '0000180f-0000-1000-8000-00805f9b34fb', // Battery
   ],
+
+  // Диагностика — наполняется во время подключения
+  diag: [],
+  diagLog: function(msg) {
+    var t = new Date().toTimeString().slice(0,8);
+    this.diag.push('[' + t + '] ' + msg);
+    if (this.diag.length > 50) this.diag.shift();
+    bleRenderDiag();
+  },
+  diagClear: function() { this.diag = []; bleRenderDiag(); },
 
   // ── Запоминание устройства ──
   loadSavedDevice: function() {
@@ -2295,6 +2365,8 @@ var ble = {
       bleSetStatus('⚠️ Web Bluetooth не поддерживается.<br>iOS → Bluefy, Android → Chrome/Edge.');
       return;
     }
+    this.diagClear();
+    this.diagLog('▶ Старт подключения. UA: ' + (navigator.userAgent.match(/Android|iPhone|iPad/i) || ['?'])[0]);
     var btn = document.getElementById('bleConnectBtn');
     if (btn) { btn.textContent = '⏳ Подключение...'; btn.disabled = true; }
 
@@ -2340,29 +2412,91 @@ var ble = {
   },
 
   setupNotifications: async function() {
-    var services;
-    try { services = await this.server.getPrimaryServices(); } catch(e) { return; }
+    // Android Chrome требует паузу между gatt.connect() и getPrimaryServices(),
+    // иначе часто возвращает пустой список сервисов.
+    await new Promise(function(r) { setTimeout(r, 600); });
 
+    this.diagLog('🔗 GATT connected. Поиск сервисов...');
+
+    var services = [];
+    try {
+      services = await this.server.getPrimaryServices();
+      this.diagLog('📋 getPrimaryServices(): найдено ' + services.length);
+    } catch(e) {
+      this.diagLog('⚠️ getPrimaryServices() ошибка: ' + (e.message || e));
+    }
+
+    // Fallback: Android Chrome иногда возвращает [] из общего getPrimaryServices(),
+    // но отдаёт сервисы при прямом запросе по UUID.
+    if (!services || services.length === 0) {
+      this.diagLog('🔄 Fallback: перебор по UUID…');
+      var found = [];
+      for (var ui = 0; ui < this.SERVICES.length; ui++) {
+        try {
+          var svc = await this.server.getPrimaryService(this.SERVICES[ui]);
+          if (svc) { found.push(svc); this.diagLog('  ✅ ' + this.SERVICES[ui]); }
+        } catch(e) {}
+      }
+      services = found;
+      this.diagLog('📋 Fallback итог: ' + services.length);
+    }
+
+    if (!services || services.length === 0) {
+      this.diagLog('❌ Сервисы не найдены. Сканер мог подключиться в классическом SPP-режиме (не BLE).');
+      this.diagLog('💡 Проверьте: сканер должен быть в режиме BLE/HID-BLE, а не SPP/HID классический.');
+      return;
+    }
+
+    var subscribed = 0;
     for (var si = 0; si < services.length; si++) {
+      var svcUuid = services[si].uuid;
+      this.diagLog('— Сервис: ' + svcUuid);
+      var chars;
       try {
-        var chars = await services[si].getCharacteristics();
-        for (var ci = 0; ci < chars.length; ci++) {
-          var c = chars[ci];
-          if (c.properties.notify || c.properties.indicate) {
-            try {
-              await c.startNotifications();
-              c.addEventListener('characteristicvaluechanged', (function(ch) {
-                return function(e) { ble.onData(e.target.value); };
-              })(c));
-            } catch(e) {}
+        chars = await services[si].getCharacteristics();
+      } catch(e) {
+        this.diagLog('  ⚠️ getCharacteristics: ' + (e.message || e));
+        continue;
+      }
+      for (var ci = 0; ci < chars.length; ci++) {
+        var c = chars[ci];
+        var p = c.properties;
+        var flags = (p.notify ? 'N' : '') + (p.indicate ? 'I' : '') + (p.read ? 'R' : '') + (p.write ? 'W' : '') + (p.writeWithoutResponse ? 'w' : '');
+        this.diagLog('  • ' + c.uuid.slice(0,8) + '… [' + flags + ']');
+        if (p.notify || p.indicate) {
+          try {
+            await c.startNotifications();
+            c.addEventListener('characteristicvaluechanged', (function(ch) {
+              return function(e) { ble.onData(e.target.value); };
+            })(c));
+            subscribed++;
+            this.diagLog('    🔔 подписка ok');
+          } catch(e) {
+            this.diagLog('    ⚠️ startNotifications: ' + (e.message || e));
           }
         }
-      } catch(e) {}
+      }
+    }
+
+    if (subscribed === 0) {
+      this.diagLog('❌ Ни одна характеристика notify/indicate не подписана.');
+    } else {
+      this.diagLog('✅ Подписано характеристик: ' + subscribed + '. Сканируйте код.');
     }
   },
 
   onData: function(dataView) {
     try {
+      // Показываем raw hex в диагностике (помогает определить формат сканера)
+      try {
+        var bytes = new Uint8Array(dataView.buffer);
+        var hex = '';
+        for (var bi = 0; bi < bytes.length && bi < 16; bi++) {
+          hex += (bytes[bi] < 16 ? '0' : '') + bytes[bi].toString(16) + ' ';
+        }
+        this.diagLog('📥 ' + bytes.length + ' байт: ' + hex.trim());
+      } catch(e) {}
+
       var decoder = new TextDecoder('utf-8');
       var text = decoder.decode(dataView)
         // Удаляем управляющие символы кроме \n \r \t
@@ -2503,6 +2637,38 @@ function onBLEBarcode(text) {
   // Если открыты какие-либо оверлеи — не мешаем, просто вставляем и ищем
   document.getElementById('barcodeInput').value = text;
   onSearch();
+}
+
+// ── BLE диагностика (показывает лог сервисов/характеристик) ──
+function bleRenderDiag() {
+  var el = document.getElementById('bleDiagLog');
+  if (!el) return;
+  if (!ble.diag || !ble.diag.length) { el.textContent = ''; return; }
+  el.textContent = ble.diag.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+function bleToggleDiag() {
+  var box = document.getElementById('bleDiagBox');
+  var btn = document.getElementById('bleDiagToggleBtn');
+  if (!box) return;
+  var open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : '';
+  if (btn) btn.textContent = open ? '🔬 Показать лог диагностики' : '🔬 Скрыть лог диагностики';
+  if (!open) bleRenderDiag();
+}
+function bleCopyDiag() {
+  var text = (ble.diag || []).join('\n');
+  if (!text) { bleToast('Лог пуст'); return; }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() { bleToast('📋 Лог скопирован'); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      bleToast('📋 Лог скопирован');
+    }
+  } catch(e) { bleToast('⚠️ Не удалось скопировать'); }
 }
 
 // ── BLE UI-функции ──
@@ -2814,6 +2980,26 @@ window.onload = function() {
     <div class="ble-note">
       <b>iOS:</b> браузер <b>Bluefy</b>&nbsp;&nbsp;|&nbsp;&nbsp;<b>Android:</b> Chrome / Edge
     </div>
+
+    <!-- Диагностика для Android: если сканер пикает, но коды не приходят -->
+    <button id="bleDiagToggleBtn" class="btn btn-secondary"
+      onclick="bleToggleDiag()" style="margin-top:6px;font-size:13px">
+      🔬 Показать лог диагностики
+    </button>
+    <div id="bleDiagBox" style="display:none">
+      <pre id="bleDiagLog" class="ble-diag-box"></pre>
+      <div class="ble-diag-row">
+        <button class="btn btn-secondary" onclick="bleCopyDiag()">📋 Копировать</button>
+        <button class="btn btn-secondary" onclick="ble.diagClear()">🗑 Очистить</button>
+      </div>
+      <div class="ble-note" style="margin-top:8px;font-size:12px">
+        <b>Android: сканер подключается, пикает, но коды не приходят?</b><br>
+        1. Убедитесь, что сканер в режиме <b>BLE</b> (а не SPP/Bluetooth Classic/HID-USB). Переключение — обычно отдельный служебный штрих-код из инструкции.<br>
+        2. Если лог показывает «Сервисы не найдены» — скорее всего сканер в SPP-режиме.<br>
+        3. Скопируйте лог и пришлите — если есть неизвестный UUID сервиса, добавим его в белый список.
+      </div>
+    </div>
+
     <button class="btn btn-secondary" onclick="closeBlePanel()" style="margin-top:6px">Закрыть</button>
   </div>
 </div>
