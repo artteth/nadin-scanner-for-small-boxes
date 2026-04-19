@@ -110,6 +110,25 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 | v127 | setTimeout вместо rAF + iOS :active хак + фото на мобиле |
 | v128 | Фикс renderPackButtons: JSON.stringify + esc() |
 | v129 | Кнопка ↻ + автообновление + фон. обновление после записи |
+| v130 | Поле+кнопка «Найти» в строку, скрытие камер в настройках, история сканирования |
+| v131 | Кнопка «Найти» шире на 20% |
+| v132 | История: подтверждение очистки + миниатюра фото (fullscreen) + порядок model\|photo\|packType\|status |
+| v133 | BLE для Android: расширен SERVICES, per-UUID fallback, задержка 600мс, лог диагностики в панели |
+
+---
+
+## BLE: важно про Android Chrome (v133)
+
+**Симптом:** сканер подключается (пикает), но штрих-коды не приходят.
+
+**Почему отличается от iOS/Bluefy:**
+- Android Chrome строго фильтрует `getPrimaryServices()` по `optionalServices` из `requestDevice()`. Если сервис не в списке — его как бы нет.
+- Chrome держит блоклист для стандартных сервисов: **HID `0x1812`, Generic Access `0x1800`, Generic Attribute `0x1801`**. Их НЕЛЬЗЯ включать в `optionalServices` — иначе `SecurityError`.
+- Многие сканеры по умолчанию в режиме **HID** или **SPP (Bluetooth Classic)** — Web Bluetooth их не видит вообще. Пользователь должен переключить в **BLE serial** режим служебным штрих-кодом из инструкции к сканеру.
+- Между `gatt.connect()` и `getPrimaryServices()` нужна пауза ~500-600мс, иначе Android иногда возвращает пустой массив.
+- Fallback: если `getPrimaryServices()` пусто — перебрать `getPrimaryService(uuid)` по списку.
+
+**Диагностика:** кнопка «🔬 Показать лог диагностики» в панели BLE. Показывает найденные UUID сервисов/характеристик + raw hex входящих пакетов.
 | v130 | input+Найти в одну строку + скрытие кнопок сканера в настройках + история сканирований |
 | v131 | Кнопка «Найти» шире на 20% |
 | v132 | История: подтверждение очистки + фото-превью + order: model|photo|packType|status |
