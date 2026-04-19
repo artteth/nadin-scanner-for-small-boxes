@@ -3,7 +3,7 @@
   "short_name": "Сканер",
   "description": "Сканер упаковки для Wildberries",
   "start_url": "/nadin-scanner-for-small-boxes/?source=pwa",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "any",
   "background_color": "#f0f4f8",
   "theme_color": "#15803d",
