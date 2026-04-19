@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v133</title>
+  <title>Сканер упаковки v134</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -854,7 +854,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v133</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v134</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -983,6 +983,8 @@ var settings = {
   showAdvancedScanner: true,
   showScanbotScanner: true,
   historyMaxItems: 10,
+  autoFocus: true,       // ставить фокус на поле ввода после сканирования
+  bleNoFocus: true,      // снимать фокус когда BLE-сканер подключён
 };
 var SETTINGS_KEY = 'scannerSettings_v1';
 
@@ -1032,6 +1034,8 @@ function syncSettingsUI() {
   document.getElementById('setAutoRefreshInterval').value = settings.autoRefreshInterval || 5;
   document.getElementById('setAutoRefreshIntervalVal').textContent = settings.autoRefreshInterval || 5;
   document.getElementById('setRefreshAfterSave').checked = settings.refreshAfterSave !== false;
+  document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
+  document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
   syncRefreshIntervalVisibility();
   updateSettingsPreview(settings);
 }
@@ -1086,7 +1090,15 @@ function readSettingsFromUI() {
     autoRefresh: document.getElementById('setAutoRefresh').checked,
     autoRefreshInterval: parseInt(document.getElementById('setAutoRefreshInterval').value),
     refreshAfterSave: document.getElementById('setRefreshAfterSave').checked,
+    autoFocus: document.getElementById('setAutoFocus').checked,
+    bleNoFocus: document.getElementById('setBleNoFocus').checked,
   };
+}
+
+function shouldAutoFocus() {
+  if (settings.autoFocus === false) return false;
+  if (settings.bleNoFocus !== false && ble.connected) return false;
+  return true;
 }
 
 function syncRefreshIntervalVisibility() {
@@ -1168,7 +1180,7 @@ function goIdle() {
   // Скрываем информацию о сканировании
   document.getElementById('scanInfo').classList.add('hidden');
   showState('stateIdle');
-  setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
+  if (shouldAutoFocus()) setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
 }
 
 // Автоматически ищем при нажатии Enter в поле
@@ -1198,7 +1210,7 @@ function preloadAllData() {
         buildDynamicPackTypes();
         renderPackButtons();
         dataLoaded = true;
-        document.getElementById('barcodeInput').focus();
+        if (shouldAutoFocus()) document.getElementById('barcodeInput').focus();
       }
     });
 }
@@ -2815,6 +2827,25 @@ window.onload = function() {
         Обновлять данные после каждой записи
       </label>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px">После сохранения в фоне загружаются свежие данные из таблицы</div>
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">⌨️ Фокус на поле ввода</div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setAutoFocus" checked>
+        Автофокус на поле ввода
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
+        Если включено — после каждого сканирования курсор возвращается в поле штрих-кода.<br>
+        <b>Выключите</b>, если клавиатура мешает (например, при BLE-сканере).
+      </div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setBleNoFocus" checked>
+        Снимать фокус при подключённом BLE-сканере
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+        Работает когда «Автофокус» включён. При подключённом BLE клавиатура не появляется — сканер сам отправляет данные.
+      </div>
     </div>
 
     <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
