@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v134</title>
+  <title>Сканер упаковки v135</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -854,7 +854,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v134</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v135</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -1099,6 +1099,26 @@ function shouldAutoFocus() {
   if (settings.autoFocus === false) return false;
   if (settings.bleNoFocus !== false && ble.connected) return false;
   return true;
+}
+
+function unlockOrientation() {
+  var status = document.getElementById('orientationStatus');
+  try {
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+      if (status) status.textContent = '✅ Блокировка снята. Теперь система управляет поворотом.';
+    } else if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('any').then(function() {
+        if (status) status.textContent = '✅ Разрешены все ориентации.';
+      }).catch(function(e) {
+        if (status) status.textContent = '⚠️ ' + (e.message || 'Не поддерживается в обычном браузере. Установите как PWA.');
+      });
+    } else {
+      if (status) status.textContent = '⚠️ screen.orientation не поддерживается этим браузером.';
+    }
+  } catch(e) {
+    if (status) status.textContent = '⚠️ ' + (e.message || e);
+  }
 }
 
 function syncRefreshIntervalVisibility() {
@@ -2846,6 +2866,18 @@ window.onload = function() {
       <div style="font-size:11px;color:#9ca3af;margin-top:4px">
         Работает когда «Автофокус» включён. При подключённом BLE клавиатура не появляется — сканер сам отправляет данные.
       </div>
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:8px">🔄 Поворот экрана</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5;margin-bottom:10px">
+        Если приложение установлено как PWA («На главный экран»), переворот вверх ногами уже разрешён через манифест.<br>
+        Кнопка ниже снимает программную блокировку поворота (если сработала).
+      </div>
+      <button class="btn btn-secondary" style="font-size:13px" onclick="unlockOrientation()">
+        🔄 Разблокировать все ориентации
+      </button>
+      <div id="orientationStatus" style="font-size:11px;color:#9ca3af;margin-top:6px"></div>
     </div>
 
     <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
