@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v137</title>
+  <title>Сканер упаковки v138</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -855,7 +855,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v137</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v138</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -984,8 +984,9 @@ var settings = {
   showAdvancedScanner: true,
   showScanbotScanner: true,
   historyMaxItems: 10,
-  autoFocus: true,       // ставить фокус на поле ввода после сканирования
-  bleNoFocus: true,      // снимать фокус когда BLE-сканер подключён
+  autoFocus: true,
+  bleNoFocus: true,
+  autoReconnect: true,   // авто-переподключение к сканеру при обрыве
 };
 var SETTINGS_KEY = 'scannerSettings_v1';
 
@@ -1037,6 +1038,7 @@ function syncSettingsUI() {
   document.getElementById('setRefreshAfterSave').checked = settings.refreshAfterSave !== false;
   document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
   document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
+  document.getElementById('setAutoReconnect').checked = settings.autoReconnect !== false;
   syncRefreshIntervalVisibility();
   updateSettingsPreview(settings);
 }
@@ -1093,6 +1095,7 @@ function readSettingsFromUI() {
     refreshAfterSave: document.getElementById('setRefreshAfterSave').checked,
     autoFocus: document.getElementById('setAutoFocus').checked,
     bleNoFocus: document.getElementById('setBleNoFocus').checked,
+    autoReconnect: document.getElementById('setAutoReconnect').checked,
   };
 }
 
@@ -2245,9 +2248,14 @@ var ble = {
   connected: false,
   lastText: '',
   lastTime: 0,
-  dedupeMs: 2000,   // игнорировать повтор того же кода в течение 2 сек
-  savedDeviceName: '', // имя последнего устройства (из localStorage)
+  dedupeMs: 2000,
+  savedDeviceName: '',
   BLE_DEV_KEY: 'bleLastDevice_v1',
+  _manualDisconnect: false,
+  _reconnectTimer: null,
+  _reconnectAttempts: 0,
+  _reconnectMax: 12,
+  _reconnectIntervalMs: 5000,
 
   // UUIDs сервисов — охватывают большинство BLE-сканеров.
   // ВАЖНО: Android Chrome строго фильтрует getPrimaryServices() по этому списку.
@@ -2428,6 +2436,7 @@ var ble = {
       this.server = await this.device.gatt.connect();
       await this.setupNotifications();
       this.connected = true;
+      this.stopAutoReconnect();
       this.saveDevice();
       this.updateUI();
       closeBlePanel();
@@ -2549,6 +2558,8 @@ var ble = {
   },
 
   disconnect: function() {
+    this._manualDisconnect = true;
+    this.stopAutoReconnect();
     try {
       if (this.device && this.device.gatt && this.device.gatt.connected) {
         this.device.gatt.disconnect();
@@ -2562,7 +2573,44 @@ var ble = {
     this.device = null;
     this.server = null;
     this.updateUI();
-    bleToast('⛔ BLE сканер отключён');
+    if (this._manualDisconnect) {
+      this._manualDisconnect = false;
+      bleToast('⛔ BLE сканер отключён');
+    } else {
+      bleToast('⛔ BLE сканер отключён');
+      if (settings.autoReconnect !== false && this.savedDeviceName) {
+        this.startAutoReconnect();
+      }
+    }
+  },
+
+  startAutoReconnect: function() {
+    this.stopAutoReconnect();
+    this._reconnectAttempts = 0;
+    bleSetStatus('🔄 Переподключение... (0/' + this._reconnectMax + ')');
+    this._scheduleReconnect();
+  },
+
+  stopAutoReconnect: function() {
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+  },
+
+  _scheduleReconnect: function() {
+    var self = this;
+    this._reconnectTimer = setTimeout(async function() {
+      self._reconnectTimer = null;
+      if (self.connected || self._manualDisconnect) return;
+      self._reconnectAttempts++;
+      bleSetStatus('🔄 Переподключение... (' + self._reconnectAttempts + '/' + self._reconnectMax + ')');
+      var ok = await self.reconnect();
+      if (ok) {
+        bleToast('🔗 Переподключён: ' + (self.savedDeviceName || 'сканер'));
+      } else if (!self.connected && !self._manualDisconnect && self._reconnectAttempts < self._reconnectMax) {
+        self._scheduleReconnect();
+      } else if (!self.connected) {
+        bleSetStatus('⛔ Сканер не отвечает. Нажмите «Подключить» вручную.');
+      }
+    }, this._reconnectIntervalMs);
   },
 
   updateUI: function() {
@@ -2633,6 +2681,7 @@ var ble = {
       this.server = await this.device.gatt.connect();
       await this.setupNotifications();
       this.connected = true;
+      this.stopAutoReconnect();
       this.saveDevice();
       this.updateUI();
       closeBlePanel();
@@ -2848,6 +2897,17 @@ window.onload = function() {
         Обновлять данные после каждой записи
       </label>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px">После сохранения в фоне загружаются свежие данные из таблицы</div>
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">📡 BLE сканер</div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setAutoReconnect" checked>
+        Авто-переподключение при обрыве
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+        Если связь прервалась — приложение само переподключится (до 12 попыток каждые 5 сек).
+      </div>
     </div>
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
