@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v138</title>
+  <title>Сканер упаковки v139</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -630,6 +630,12 @@
     .torch-btn.visible { display: flex; }
     .torch-btn.on { background: rgba(255,200,0,0.6); }
 
+    /* ── Перевёрнутый интерфейс ── */
+    body.ui-flipped {
+      transform: rotate(180deg);
+      transform-origin: 50% 50%;
+    }
+
     /* ── BLE Плавающая кнопка ── */
     .ble-fab {
       position: fixed;
@@ -855,7 +861,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v138</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v139</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -1103,6 +1109,26 @@ function shouldAutoFocus() {
   if (settings.autoFocus === false) return false;
   if (settings.bleNoFocus !== false && ble.connected) return false;
   return true;
+}
+
+var UI_FLIP_KEY = 'uiFlipped_v1';
+
+function initFlip() {
+  var flipped = false;
+  try { flipped = localStorage.getItem(UI_FLIP_KEY) === '1'; } catch(e) {}
+  if (flipped) document.body.classList.add('ui-flipped');
+  _updateFlipBtn(flipped);
+}
+
+function toggleFlip() {
+  var flipped = document.body.classList.toggle('ui-flipped');
+  try { localStorage.setItem(UI_FLIP_KEY, flipped ? '1' : '0'); } catch(e) {}
+  _updateFlipBtn(flipped);
+}
+
+function _updateFlipBtn(flipped) {
+  var btn = document.getElementById('flipToggleBtn');
+  if (btn) btn.textContent = flipped ? '🔃 Вернуть обычную ориентацию' : '🔃 Перевернуть интерфейс (180°)';
 }
 
 function unlockOrientation() {
@@ -2786,6 +2812,7 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 window.onload = function() {
   initTableEvents();
   loadSettings();
+  initFlip();
   loadScCfg();
   loadHistory();
   preloadAllData();
@@ -2934,6 +2961,12 @@ window.onload = function() {
       <div style="font-size:12px;color:#374151;line-height:1.5;margin-bottom:10px">
         Если приложение установлено как PWA («На главный экран»), переворот вверх ногами уже разрешён через манифест.<br>
         Кнопка ниже снимает программную блокировку поворота (если сработала).
+      </div>
+      <button id="flipToggleBtn" class="btn btn-secondary" style="font-size:13px" onclick="toggleFlip()">
+        🔃 Перевернуть интерфейс (180°)
+      </button>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
+        Программно переворачивает весь интерфейс — если авто-поворот ОС не срабатывает.
       </div>
       <button class="btn btn-secondary" style="font-size:13px" onclick="unlockOrientation()">
         🔄 Разблокировать все ориентации
