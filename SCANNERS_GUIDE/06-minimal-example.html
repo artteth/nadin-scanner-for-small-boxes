@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<!--
+  ЕДИНЫЙ САМОДОСТАТОЧНЫЙ ФАЙЛ — все 4 сканера в одном HTML.
+  Открыть через HTTPS (или http://localhost) — работать будет сразу,
+  кроме Scanbot: ему нужна папка /scanbot-engine/bin/barcode-scanner/
+  с WASM-файлами (см. 01-dependencies.md, 05-scanbot-detailed.md).
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сканеры QR/штрих-кодов — демо</title>
+
+<!-- CDN -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/ScanbotSDK.ui2.min.js"></script>
+
+<link rel="stylesheet" href="03-styles.css">
+</head>
+<body style="font-family: system-ui, -apple-system, sans-serif; padding: 16px; max-width: 560px; margin: 0 auto;">
+
+<h1>Сканеры — демо</h1>
+
+<div class="scan-section">
+    <button id="scan-btn" class="btn btn-primary btn-large">
+        <span class="btn-icon">📷</span> Сканировать QR-код
+    </button>
+    <button id="scan-btn-zbar" class="btn btn-secondary btn-large" style="margin-top: 12px;">
+        <span class="btn-icon">🔍</span> Сканировать (ZBar)
+    </button>
+    <button id="scan-btn-scanbot" class="btn btn-outline btn-large" style="margin-top: 12px;">
+        <span class="btn-icon">📸</span> Сканировать (Scanbot SDK)
+    </button>
+    <button id="scan-btn-jsqr" class="btn btn-secondary btn-large" style="margin-top: 12px;">
+        <span class="btn-icon">🔎</span> Сканировать (jsQR)
+    </button>
+
+    <div class="divider"><span>или</span></div>
+
+    <div class="manual-input">
+        <input type="text" id="manual-code" placeholder="Введите код вручную" class="input">
+        <button id="manual-submit" class="btn btn-secondary">Проверить</button>
+    </div>
+</div>
+
+<div id="result" style="margin-top:24px; padding:16px; background:#f1f5f9; border-radius:8px; min-height:60px;">
+    Отсканированные коды появятся здесь…
+</div>
+
+<!-- Модалки -->
+<div id="scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование QR-кода</h2>
+            <button class="close-btn" id="close-scanner">&times;</button>
+        </div>
+        <div id="qr-reader" class="qr-reader"></div>
+        <p class="scanner-hint">Наведите камеру на QR-код</p>
+    </div>
+</div>
+
+<div id="zbar-scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование (ZBar)</h2>
+            <button class="close-btn" id="close-zbar-scanner">&times;</button>
+        </div>
+        <div id="zbar-reader" class="qr-reader"></div>
+        <p class="scanner-hint">Наведите камеру на код</p>
+    </div>
+</div>
+
+<div id="scanbot-scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование (Scanbot SDK)</h2>
+            <button class="close-btn" id="close-scanbot-scanner">&times;</button>
+        </div>
+        <div id="scanbot-reader" style="width:100%;height:60vh;min-height:320px;background:#000;"></div>
+    </div>
+</div>
+
+<div id="jsqr-scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование (jsQR)</h2>
+            <button class="close-btn" id="close-jsqr-scanner">&times;</button>
+        </div>
+        <div id="jsqr-reader" class="qr-reader"></div>
+        <p class="scanner-hint">Наведите камеру на QR-код</p>
+    </div>
+</div>
+
+<script src="04-scanners.js"></script>
+<script>
+// Переопределяем handleCodeScan для демо: выводим результат в блок
+window.handleCodeScan = async function(code) {
+    const r = document.getElementById('result');
+    const time = new Date().toLocaleTimeString();
+    r.innerHTML = `<strong>${time}</strong><br>Код: <code>${code}</code><br>` + r.innerHTML;
+    showToast('Код: ' + code, 'info');
+};
+</script>
+</body>
+</html>

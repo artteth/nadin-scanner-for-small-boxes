@@ -1,0 +1,143 @@
+<!--
+  HTML-разметка сканеров: 4 кнопки запуска + 4 модалки сканирования + общий блок ручного ввода.
+  ID и классы совпадают с рабочим проектом и ожидаются в 04-scanners.js.
+
+  Куда вставлять:
+    <head>  — теги <script> для CDN (см. 01-dependencies.md)
+    <body>  — блок .scan-section (кнопки) и блоки .modal (4 модалки)
+-->
+
+<!-- ========== Блок с 4 кнопками запуска сканера + ручной ввод ========== -->
+<div class="scan-section">
+    <button id="scan-btn" class="btn btn-primary btn-large">
+        <span class="btn-icon">📷</span>
+        Сканировать QR-код
+    </button>
+
+    <button id="scan-btn-zbar" class="btn btn-secondary btn-large" style="margin-top: 12px;">
+        <span class="btn-icon">🔍</span>
+        Сканировать (ZBar)
+    </button>
+
+    <button id="scan-btn-scanbot" class="btn btn-outline btn-large" style="margin-top: 12px;">
+        <span class="btn-icon">📸</span>
+        Сканировать (Scanbot SDK)
+    </button>
+
+    <button id="scan-btn-jsqr" class="btn btn-secondary btn-large" style="margin-top: 12px;">
+        <span class="btn-icon">🔎</span>
+        Сканировать (jsQR)
+    </button>
+
+    <div class="divider"><span>или</span></div>
+
+    <!-- Поле ручного ввода на случай, если камера не справляется -->
+    <div class="manual-input">
+        <input type="text" id="manual-code"
+               placeholder="Введите код вручную (напр. 2020_1)" class="input">
+        <button id="manual-submit" class="btn btn-secondary">Проверить</button>
+    </div>
+</div>
+
+
+<!-- ========== Модалка №1: html5-qrcode ========== -->
+<div id="scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование QR-кода</h2>
+            <button class="close-btn" id="close-scanner">&times;</button>
+        </div>
+        <!-- html5-qrcode САМ рисует UI внутри этого div -->
+        <div id="qr-reader" class="qr-reader"></div>
+        <p class="scanner-hint">Наведите камеру на QR-код</p>
+
+        <div style="padding:20px; border-top:1px solid var(--border);">
+            <p class="scanner-hint">Или введите вручную:</p>
+            <div class="manual-input" style="margin-top:8px;">
+                <input type="text" id="manual-code-modal" placeholder="напр. 2020_1" class="input">
+                <button id="manual-submit-modal" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ========== Модалка №2: ZBar (на самом деле jsQR внутри) ========== -->
+<div id="zbar-scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование (ZBar)</h2>
+            <button class="close-btn" id="close-zbar-scanner">&times;</button>
+        </div>
+        <!-- Сюда JS-код вставит <video>, под ним крутит <canvas> в памяти -->
+        <div id="zbar-reader" class="qr-reader"></div>
+        <p class="scanner-hint">Наведите камеру на код (ZBar/WASM)</p>
+
+        <div style="padding:20px; border-top:1px solid var(--border);">
+            <p class="scanner-hint">Или введите вручную:</p>
+            <div class="manual-input" style="margin-top:8px;">
+                <input type="text" id="manual-code-zbar" placeholder="напр. 2020_1" class="input">
+                <button id="manual-submit-zbar" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ========== Модалка №3: Scanbot SDK ========== -->
+<!--
+  ВАЖНО: сам Scanbot RTU UI (Ready-To-Use) открывает собственный полноэкранный оверлей,
+  так что эта модалка почти не используется — оставлена для единообразия и ручного ввода.
+-->
+<div id="scanbot-scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование (Scanbot SDK)</h2>
+            <button class="close-btn" id="close-scanbot-scanner">&times;</button>
+        </div>
+        <div id="scanbot-reader"
+             style="width:100%; height:60vh; min-height:320px; background:#000; position:relative; overflow:hidden;"></div>
+        <p class="scanner-hint">📸 Наведите камеру на QR-код</p>
+
+        <div style="padding:20px; border-top:1px solid var(--border);">
+            <p class="scanner-hint">Или введите вручную:</p>
+            <div class="manual-input" style="margin-top:8px;">
+                <input type="text" id="manual-code-scanbot" placeholder="напр. 2020_1" class="input">
+                <button id="manual-submit-scanbot" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ========== Модалка №4: jsQR (отдельно, как fallback) ========== -->
+<div id="jsqr-scanner-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Сканирование (jsQR)</h2>
+            <button class="close-btn" id="close-jsqr-scanner">&times;</button>
+        </div>
+        <div id="jsqr-reader" class="qr-reader"></div>
+        <p class="scanner-hint">🔎 Наведите камеру на QR-код</p>
+
+        <div style="padding:20px; border-top:1px solid var(--border);">
+            <p class="scanner-hint">Или введите вручную:</p>
+            <div class="manual-input" style="margin-top:8px;">
+                <input type="text" id="manual-code-jsqr" placeholder="напр. 2020_1" class="input">
+                <button id="manual-submit-jsqr" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!--
+  Карта ID, которые ждёт JS-код (04-scanners.js):
+
+  Кнопки:         #scan-btn, #scan-btn-zbar, #scan-btn-scanbot, #scan-btn-jsqr
+  Ручной ввод:    #manual-code (основной), #manual-submit
+  Модалки:        #scanner-modal, #zbar-scanner-modal, #scanbot-scanner-modal, #jsqr-scanner-modal
+  Области видео:  #qr-reader, #zbar-reader, #scanbot-reader, #jsqr-reader
+  Кнопки закрытия: #close-scanner, #close-zbar-scanner, #close-scanbot-scanner, #close-jsqr-scanner
+  Поля ввода в модалках: #manual-code-modal, #manual-code-zbar, #manual-code-scanbot, #manual-code-jsqr
+-->
