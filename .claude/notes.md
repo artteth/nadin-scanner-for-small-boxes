@@ -114,6 +114,13 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 | v131 | Кнопка «Найти» шире на 20% |
 | v132 | История: подтверждение очистки + миниатюра фото (fullscreen) + порядок model\|photo\|packType\|status |
 | v133 | BLE для Android: расширен SERVICES, per-UUID fallback, задержка 600мс, лог диагностики в панели |
+| v134 | Автофокус на поле ввода: два тогла в настройках (master + отключить при BLE) |
+| v135 | manifest orientation: "any" + кнопка разблокировки ориентации в настройках |
+| v136 | manifest display: "standalone" — фикс чёрной области вокруг нотча |
+| v137 | manifest display: "fullscreen" возврат + html background фикс нотча |
+| v138 | BLE авто-реконнект при обрыве: до 12 попыток по 5 сек, тогл в настройках |
+| v139 | Кнопка принудительного переворота интерфейса 180° (body.ui-flipped) |
+| v140 | Сканеры: basic→html5-qrcode, advanced→jsQR HD, ScanBot→реальный Scanbot SDK v8 RTU UI |
 
 ---
 
@@ -129,7 +136,3 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 - Fallback: если `getPrimaryServices()` пусто — перебрать `getPrimaryService(uuid)` по списку.
 
 **Диагностика:** кнопка «🔬 Показать лог диагностики» в панели BLE. Показывает найденные UUID сервисов/характеристик + raw hex входящих пакетов.
-| v130 | input+Найти в одну строку + скрытие кнопок сканера в настройках + история сканирований |
-| v131 | Кнопка «Найти» шире на 20% |
-| v132 | История: подтверждение очистки + фото-превью + order: model|photo|packType|status |
-| v133 | BLE Android fix: расширен список сервисов, задержка 600ms, per-UUID fallback, диагностический лог |
