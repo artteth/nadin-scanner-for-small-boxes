@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v139</title>
+  <title>Сканер упаковки v140</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -856,12 +856,20 @@
     /* Утилиты */
     .hidden { display: none; }
   </style>
+
+  <!-- ── Библиотеки сканеров ── -->
+  <!-- html5-qrcode: надёжный сканер QR+штрихкодов с готовым UI камеры -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- jsQR: чистый декодер QR (используем для «Расширенного» сканера в HD) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <!-- Scanbot Web SDK v8: RTU UI, 60 сек без лицензии; type="module" обязателен -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/ScanbotSDK.ui2.min.js"></script>
 </head>
 <body>
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v139</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v140</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -896,7 +904,7 @@
     </div>
     <div class="scan-btn-row" id="scanRowAdvanced">
       <button class="btn-scan-cfg" onclick="openScannerCfg('advanced')" title="Настройки">⚙️</button>
-      <button class="btn btn-secondary" onclick="openCameraMode('advanced')">🔬 Расширенный сканер</button>
+      <button class="btn btn-secondary" onclick="openCameraMode('advanced')">🔬 HD Сканер (QR)</button>
     </div>
     <div class="scan-btn-row" id="scanRowScanbot">
       <button class="btn-scan-cfg" onclick="openScannerCfg('scanbot')" title="Настройки">⚙️</button>
@@ -1787,29 +1795,7 @@ var ZXING_FMTS = [
   { id: 'RSS_EXPANDED', label: 'RSS Expanded' },
 ];
 
-// Форматы BarcodeDetector (scanbot)
-var BD_FMTS = [
-  { id: 'ean_13',      label: 'EAN-13' },
-  { id: 'ean_8',       label: 'EAN-8' },
-  { id: 'qr_code',     label: 'QR Code' },
-  { id: 'data_matrix', label: 'DataMatrix' },
-  { id: 'code_128',    label: 'Code 128' },
-  { id: 'code_39',     label: 'Code 39' },
-  { id: 'code_93',     label: 'Code 93' },
-  { id: 'itf',         label: 'ITF' },
-  { id: 'codabar',     label: 'Codabar' },
-  { id: 'pdf417',      label: 'PDF 417' },
-  { id: 'aztec',       label: 'Aztec' },
-  { id: 'upc_a',       label: 'UPC-A' },
-  { id: 'upc_e',       label: 'UPC-E' },
-];
-
-// Маппинг BD → ZXing (для фоллбэка)
-var BD_TO_ZXING = {
-  ean_13:'EAN_13', ean_8:'EAN_8', qr_code:'QR_CODE', data_matrix:'DATA_MATRIX',
-  code_128:'CODE_128', code_39:'CODE_39', code_93:'CODE_93', itf:'ITF',
-  codabar:'CODABAR', pdf417:'PDF_417', aztec:'AZTEC', upc_a:'UPC_A', upc_e:'UPC_E'
-};
+// Для Scanbot используем те же ZXING_FMTS (html5-qrcode формат-ключи совпадают)
 
 function defaultScCfg() {
   return {
@@ -1823,9 +1809,9 @@ function defaultScCfg() {
       resolution: 1080, fps: 30, scanInterval: 150,
       tryHarder: true, charset: 'UTF-8'
     },
+    // scanbot — настройки не используются (Scanbot SDK управляет сам через RTU UI)
     scanbot: {
-      formats: ['ean_13','ean_8','qr_code','data_matrix'],
-      resolution: 1080, fps: 30, scanInterval: 200,
+      formats: [], resolution: 1080, fps: 30, scanInterval: 200,
       tryHarder: false, charset: ''
     }
   };
@@ -1851,42 +1837,46 @@ function saveScCfgStorage() {
 
 function openScannerCfg(mode) {
   _scCfgMode = mode;
-  var titles = { basic:'📷 Камера', advanced:'🔬 Расширенный сканер', scanbot:'📱 ScanBot' };
+  var titles = { basic:'📷 Камера (html5-qrcode)', advanced:'🔬 HD Сканер (jsQR)', scanbot:'📱 Scanbot SDK' };
   document.getElementById('scannerCfgTitle').textContent = 'Настройки: ' + (titles[mode] || mode);
 
   var isScanbot = mode === 'scanbot';
-  var fmtList = isScanbot ? BD_FMTS : ZXING_FMTS;
   var c = scCfg[mode];
 
-  // Форматы
+  // Форматы — только для basic (html5-qrcode поддерживает ZXING_FMTS)
+  // advanced (jsQR) поддерживает только QR, scanbot настроек не требует
   var grid = document.getElementById('scFmtGrid');
-  grid.innerHTML = fmtList.map(function(f) {
-    var chk = c.formats.indexOf(f.id) >= 0 ? ' checked' : '';
-    return '<label class="fmt-item"><input type="checkbox" value="' + f.id + '"' + chk + '>' + f.label + '</label>';
-  }).join('');
+  if (mode === 'basic') {
+    grid.innerHTML = ZXING_FMTS.map(function(f) {
+      var chk = c.formats.indexOf(f.id) >= 0 ? ' checked' : '';
+      return '<label class="fmt-item"><input type="checkbox" value="' + f.id + '"' + chk + '>' + f.label + '</label>';
+    }).join('');
+    grid.style.display = '';
+  } else {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+  }
 
-  // Разрешение
+  // Разрешение/FPS — только для advanced (jsQR)
+  var showAdvCfg = mode === 'advanced';
   document.getElementById('scResolution').value = c.resolution;
-
-  // FPS
   document.getElementById('scFps').value = c.fps;
   document.getElementById('scFpsVal').textContent = c.fps;
-
-  // Интервал
   document.getElementById('scInterval').value = c.scanInterval;
   document.getElementById('scIntervalVal').textContent = c.scanInterval;
 
-  // TRY_HARDER + charset — только для ZXing
-  document.getElementById('scTryHarderGroup').style.display = isScanbot ? 'none' : '';
-  document.getElementById('scCharsetGroup').style.display = isScanbot ? 'none' : '';
-  if (!isScanbot) {
-    document.getElementById('scTryHarder').checked = c.tryHarder;
-    document.getElementById('scCharset').value = c.charset || '';
-  }
+  document.getElementById('scTryHarderGroup').style.display = 'none';
+  document.getElementById('scCharsetGroup').style.display = 'none';
 
-  // API-заметка для ScanBot
-  document.getElementById('scApiNote').style.display =
-    (isScanbot && !('BarcodeDetector' in window)) ? '' : 'none';
+  // Заметка для Scanbot
+  document.getElementById('scApiNote').style.display = isScanbot ? '' : 'none';
+  if (isScanbot) {
+    document.getElementById('scApiNote').innerHTML =
+      '<b>📱 Scanbot SDK v8 (RTU UI)</b><br>' +
+      'SDK сам открывает полноэкранный сканер с рамкой, вибрацией и всеми форматами.<br>' +
+      'Настройки здесь не применяются — Scanbot управляет камерой самостоятельно.<br>' +
+      '<span style="color:#92400e">⏱ Без лицензии — 60 секунд за сессию.</span>';
+  }
 
   document.getElementById('scannerCfgOverlay').classList.add('active');
 }
@@ -1929,39 +1919,43 @@ function resetScannerCfg() {
 // ── Камера / сканеры ──
 // ═══════════════════════════════════════════════
 
-var codeReader = null;
-var zxingLoaded = false;
-var _scanBotTimer = null;
+var _html5QrcodeReader = null;  // инстанс Html5Qrcode (basic)
+var _jsqrStream = null;         // MediaStream для advanced (jsQR)
+var _jsqrRafId = null;          // requestAnimationFrame handle
+var _scanbotInitialized = false; // флаг инициализации Scanbot SDK
 var _currentTrack = null;
 var _activeScanMode = '';
 
-function loadZXing() {
-  return new Promise(function(resolve, reject) {
-    if (zxingLoaded) { resolve(); return; }
-    var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-    s.onload = function() { zxingLoaded = true; resolve(); };
-    s.onerror = function() { reject(new Error('Не удалось загрузить библиотеку сканирования')); };
-    document.head.appendChild(s);
-  });
-}
-
-function resToWidth(h) {
-  if (h >= 1920) return 3840;
-  if (h >= 1080) return 1920;
-  if (h >= 720) return 1280;
-  return 640;
+// Предзагрузка Scanbot SDK в фоне — первое нажатие будет мгновенным
+function preloadScanbot() {
+  setTimeout(function() {
+    if (typeof ScanbotSDK === 'undefined') return;
+    if (_scanbotInitialized) return;
+    ScanbotSDK.initialize({
+      enginePath: 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/bin/complete/',
+      licenseKey: ''
+    }).then(function() {
+      _scanbotInitialized = true;
+    }).catch(function() {});
+  }, 800);
 }
 
 // Общая точка входа — открывает камеру в нужном режиме
 function openCameraMode(mode) {
   _activeScanMode = mode;
-  var labels = { basic:'Камера', advanced:'Расширенный', scanbot:'ScanBot' };
+
+  // Scanbot SDK открывает собственный полноэкранный UI — наш оверлей не нужен
+  if (mode === 'scanbot') {
+    startScanbot();
+    return;
+  }
+
+  var labels = { basic:'📷 Камера', advanced:'🔬 HD Сканер' };
   document.getElementById('cameraModeLabel').textContent = labels[mode] || mode;
 
   var c = scCfg[mode];
 
-  // Форма рамки: квадрат если есть 2D-форматы
+  // Форма рамки: квадрат для 2D-кодов, прямоугольник для штрих-кодов
   var zone = document.getElementById('scanZone');
   var has2D = c.formats.some(function(f) {
     return /QR|qr|MATRIX|matrix|AZTEC|aztec|PDF|pdf/i.test(f);
@@ -1974,106 +1968,191 @@ function openCameraMode(mode) {
     zone.style.height = 'min(28vw, 120px)';
   }
 
+  // Показываем нужный контейнер
+  var html5qrBox = document.getElementById('html5qr-container');
+  var video = document.getElementById('cameraVideo');
+  if (mode === 'basic') {
+    html5qrBox.style.display = '';
+    video.style.display = 'none';
+    zone.style.display = 'none'; // html5-qrcode рисует свою рамку
+  } else {
+    html5qrBox.style.display = 'none';
+    video.style.display = '';
+    zone.style.display = '';
+  }
+
   document.getElementById('cameraOverlay').classList.add('active');
 
-  if (mode === 'scanbot') {
-    startScanBot(c);
+  if (mode === 'basic') {
+    startHtml5Qrcode(c);
   } else {
-    startZxing(c);
+    startJsQR(c);
   }
 }
 
-// ── ZXing-движок (basic / advanced) ──
-function startZxing(c) {
-  loadZXing()
-    .then(function() {
-      var hints = new Map();
-
-      var fmts = c.formats.map(function(f) { return ZXing.BarcodeFormat[f]; }).filter(Boolean);
-      if (fmts.length) hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, fmts);
-      if (c.tryHarder) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      if (c.charset) hints.set(ZXing.DecodeHintType.CHARACTER_SET, c.charset);
-
-      codeReader = new ZXing.BrowserMultiFormatReader(hints);
-      codeReader.timeBetweenDecodingAttempts = c.scanInterval || 300;
-
-      return codeReader.decodeFromConstraints(
-        {
-          video: {
-            facingMode: 'environment',
-            width:     { ideal: resToWidth(c.resolution) },
-            height:    { ideal: c.resolution },
-            frameRate: { ideal: c.fps || 30 }
-          }
-        },
-        document.getElementById('cameraVideo'),
-        function(result) {
-          if (result) onScanResult(result.getText());
-        }
-      );
-    })
-    .then(function() {
-      grabTrackAndCheckTorch();
-    })
-    .catch(function(e) {
-      closeCamera();
-      showError('Камера недоступна: ' + (e.message || e));
-      startErrorTimer();
-    });
-}
-
-// ── ScanBot-движок (BarcodeDetector API, фоллбэк → ZXing) ──
-function startScanBot(c) {
-  var useBD = 'BarcodeDetector' in window;
-
-  if (!useBD) {
-    // Фоллбэк: конвертируем BD-форматы в ZXing и запускаем ZXing
-    var converted = {
-      formats: c.formats.map(function(f) { return BD_TO_ZXING[f]; }).filter(Boolean),
-      resolution: c.resolution,
-      fps: c.fps,
-      scanInterval: c.scanInterval,
-      tryHarder: false,
-      charset: ''
-    };
-    startZxing(converted);
+// ── Сканер 1 (basic): html5-qrcode — надёжный, с готовым UI камеры ──
+// Поддерживает QR + все штрих-коды (EAN-13, Code128, DataMatrix и др.)
+function startHtml5Qrcode(c) {
+  if (typeof Html5Qrcode === 'undefined') {
+    closeCamera();
+    showError('Библиотека html5-qrcode не загрузилась. Проверьте интернет.');
+    startErrorTimer();
     return;
   }
 
-  // Нативный BarcodeDetector
-  var video = document.getElementById('cameraVideo');
-  var constraints = {
-    video: {
-      facingMode: 'environment',
-      width:     { ideal: resToWidth(c.resolution) },
-      height:    { ideal: c.resolution },
-      frameRate: { ideal: c.fps || 30 }
-    }
+  // Выводим подсказку внутри оверлея
+  var hint = document.getElementById('cameraHint');
+  if (hint) hint.textContent = 'Наведите штрих-код в рамку';
+
+  // Настраиваем формат-список
+  var fmtMap = {
+    'EAN_13': Html5QrcodeSupportedFormats.EAN_13,
+    'EAN_8':  Html5QrcodeSupportedFormats.EAN_8,
+    'QR_CODE': Html5QrcodeSupportedFormats.QR_CODE,
+    'CODE_128': Html5QrcodeSupportedFormats.CODE_128,
+    'CODE_39':  Html5QrcodeSupportedFormats.CODE_39,
+    'DATA_MATRIX': Html5QrcodeSupportedFormats.DATA_MATRIX,
+    'ITF': Html5QrcodeSupportedFormats.ITF,
+    'PDF_417': Html5QrcodeSupportedFormats.PDF_417,
+    'AZTEC': Html5QrcodeSupportedFormats.AZTEC,
+    'UPC_A': Html5QrcodeSupportedFormats.UPC_A,
+    'UPC_E': Html5QrcodeSupportedFormats.UPC_E,
+  };
+  var fmts = c.formats
+    .map(function(f) { return fmtMap[f]; })
+    .filter(function(v) { return v !== undefined; });
+
+  // Чистим предыдущий инстанс
+  if (_html5QrcodeReader) {
+    try { _html5QrcodeReader.stop().catch(function(){}); } catch(e) {}
+    _html5QrcodeReader = null;
+  }
+
+  _html5QrcodeReader = new Html5Qrcode('html5qr-container', {
+    formatsToSupport: fmts.length ? fmts : undefined,
+    verbose: false
+  });
+
+  var config = {
+    fps: c.fps || 15,
+    qrbox: function(w, h) {
+      var side = Math.min(w, h) * 0.75;
+      return { width: side, height: Math.round(side * 0.45) };
+    },
+    aspectRatio: 1.0,
+    experimentalFeatures: { useBarCodeDetectorIfSupported: false }
   };
 
-  navigator.mediaDevices.getUserMedia(constraints)
-    .then(function(stream) {
-      video.srcObject = stream;
-      _currentTrack = stream.getVideoTracks()[0];
-      checkTorchCapability();
+  _html5QrcodeReader.start(
+    { facingMode: 'environment' },
+    config,
+    function(text) { onScanResult(text); }
+  ).catch(function(e) {
+    closeCamera();
+    showError('Камера недоступна: ' + (e.message || e));
+    startErrorTimer();
+  });
+}
 
-      var bdFmts = c.formats.length ? c.formats : ['ean_13','qr_code','data_matrix'];
-      var detector = new BarcodeDetector({ formats: bdFmts });
+// ── Сканер 2 (advanced): jsQR в HD — ручной цикл через canvas ──
+// jsQR — только QR-коды, но отлично работает с низким качеством изображения
+function startJsQR(c) {
+  if (typeof jsQR === 'undefined') {
+    closeCamera();
+    showError('Библиотека jsQR не загрузилась. Проверьте интернет.');
+    startErrorTimer();
+    return;
+  }
 
-      _scanBotTimer = setInterval(function() {
-        if (video.readyState < 2) return;
-        detector.detect(video)
-          .then(function(codes) {
-            if (codes.length > 0) onScanResult(codes[0].rawValue);
-          })
-          .catch(function() {});
-      }, c.scanInterval || 200);
-    })
-    .catch(function(e) {
-      closeCamera();
-      showError('Камера недоступна: ' + (e.message || e));
+  var video = document.getElementById('cameraVideo');
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+
+  var res = c.resolution || 720;
+  var w = res >= 1080 ? 1920 : res >= 720 ? 1280 : 640;
+
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: 'environment',
+      width:  { ideal: w },
+      height: { ideal: res },
+      frameRate: { ideal: c.fps || 30 }
+    }
+  }).then(function(stream) {
+    _jsqrStream = stream;
+    video.srcObject = stream;
+    _currentTrack = stream.getVideoTracks()[0];
+    checkTorchCapability();
+
+    var scan = function() {
+      if (!_jsqrStream) return; // остановлено
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var code = jsQR(imgData.data, imgData.width, imgData.height, {
+          inversionAttempts: 'dontInvert'
+        });
+        if (code) { onScanResult(code.data); return; }
+      }
+      _jsqrRafId = requestAnimationFrame(scan);
+    };
+    video.addEventListener('loadeddata', function() {
+      _jsqrRafId = requestAnimationFrame(scan);
+    }, { once: true });
+  }).catch(function(e) {
+    closeCamera();
+    showError('Камера недоступна: ' + (e.message || e));
+    startErrorTimer();
+  });
+}
+
+// ── Сканер 3 (scanbot): Scanbot Web SDK v8 RTU UI ──
+// SDK сам открывает полноэкранный интерфейс — наш оверлей не используется.
+// Работает 60 секунд без лицензии.
+async function startScanbot() {
+  if (typeof ScanbotSDK === 'undefined') {
+    showError('Scanbot SDK не загрузился. Проверьте интернет и перезагрузите страницу.');
+    startErrorTimer();
+    return;
+  }
+
+  // Инициализируем один раз
+  if (!_scanbotInitialized) {
+    try {
+      await ScanbotSDK.initialize({
+        enginePath: 'https://cdn.jsdelivr.net/npm/scanbot-web-sdk@8.0.1/bundle/bin/complete/',
+        licenseKey: ''
+      });
+      _scanbotInitialized = true;
+    } catch(e) {
+      showError('Ошибка Scanbot: ' + (e.message || e));
       startErrorTimer();
-    });
+      return;
+    }
+  }
+
+  try {
+    var config = new ScanbotSDK.UI.Config.BarcodeScannerScreenConfiguration();
+    // Русские подписи
+    config.localization = config.localization || {};
+    config.localization.barcode_scanner_cancel = 'Отмена';
+    // Звук и вибрация при успехе
+    if (config.sound) config.sound.successBeepEnabled = true;
+    if (config.vibration) config.vibration.enabled = true;
+
+    var result = await ScanbotSDK.UI.createBarcodeScanner(config);
+
+    if (result && result.items && result.items.length > 0) {
+      onScanResult(result.items[0].barcode.text);
+    }
+  } catch(e) {
+    // Пользователь нажал «Отмена» — молчим
+    if (e && e.message && e.message.toLowerCase().indexOf('cancel') >= 0) return;
+    showError('Ошибка сканера: ' + (e.message || e));
+    startErrorTimer();
+  }
 }
 
 function onScanResult(text) {
@@ -2086,21 +2165,28 @@ function onScanResult(text) {
 function closeCamera() {
   document.getElementById('cameraOverlay').classList.remove('active');
 
-  // Останавливаем ScanBot-таймер
-  if (_scanBotTimer) { clearInterval(_scanBotTimer); _scanBotTimer = null; }
-
-  // Останавливаем ZXing (он сам выключает стрим)
-  if (codeReader) {
-    try { codeReader.reset(); } catch(e) {}
-    codeReader = null;
-  } else {
-    // Если нет ZXing — стрим надо закрыть вручную
-    var video = document.getElementById('cameraVideo');
-    if (video && video.srcObject) {
-      video.srcObject.getTracks().forEach(function(t) { t.stop(); });
-      video.srcObject = null;
-    }
+  // Останавливаем html5-qrcode (basic)
+  if (_html5QrcodeReader) {
+    try { _html5QrcodeReader.stop().catch(function(){}); } catch(e) {}
+    _html5QrcodeReader = null;
+    var container = document.getElementById('html5qr-container');
+    if (container) { container.innerHTML = ''; container.style.display = 'none'; }
   }
+
+  // Останавливаем jsQR RAF-цикл и стрим (advanced)
+  if (_jsqrRafId) { cancelAnimationFrame(_jsqrRafId); _jsqrRafId = null; }
+  if (_jsqrStream) {
+    _jsqrStream.getTracks().forEach(function(t) { t.stop(); });
+    _jsqrStream = null;
+  }
+
+  // Останавливаем видео-стрим если ещё работает
+  var video = document.getElementById('cameraVideo');
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach(function(t) { t.stop(); });
+    video.srcObject = null;
+  }
+  if (video) video.style.display = '';
 
   _currentTrack = null;
 
@@ -2816,6 +2902,7 @@ window.onload = function() {
   loadScCfg();
   loadHistory();
   preloadAllData();
+  preloadScanbot();
   ble.loadSavedDevice();
   ble.updateUI();
   // Пробуем авто-переподключение к сохранённому устройству
@@ -3033,9 +3120,7 @@ window.onload = function() {
       </select>
     </div>
 
-    <div id="scApiNote" class="scanner-cfg-note" style="display:none">
-      ⚠️ BarcodeDetector API недоступна в этом браузере. Будет использован запасной движок ZXing.
-    </div>
+    <div id="scApiNote" class="scanner-cfg-note" style="display:none"></div>
 
     <button class="btn btn-primary" onclick="saveScannerCfg()">Сохранить</button>
     <button class="btn btn-secondary" onclick="closeScannerCfg()" style="margin-top:10px">Отмена</button>
@@ -3072,6 +3157,9 @@ window.onload = function() {
 
 <!-- Камера -->
 <div id="cameraOverlay" class="camera-overlay">
+  <!-- Для режима basic (html5-qrcode рендерит сюда свой video+UI) -->
+  <div id="html5qr-container" style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;z-index:1"></div>
+  <!-- Для режима advanced (jsQR) -->
   <video id="cameraVideo" autoplay muted playsinline></video>
   <div class="scan-zone" id="scanZone">
     <div class="scan-line"></div>
@@ -3079,7 +3167,7 @@ window.onload = function() {
   <span class="camera-mode-label" id="cameraModeLabel"></span>
   <button class="torch-btn" id="torchBtn" onclick="toggleTorch()">🔦</button>
   <button class="camera-close-btn" onclick="closeCamera()">✕</button>
-  <div class="camera-hint">Наведите штрих-код в рамку</div>
+  <div class="camera-hint" id="cameraHint">Наведите штрих-код в рамку</div>
 </div>
 
 
