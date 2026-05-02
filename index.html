@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v142</title>
+  <title>Сканер упаковки v143</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -57,6 +57,58 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       box-sizing: border-box;
+    }
+
+    /* v143: split-layout для горизонтальной ориентации (планшеты, большие телефоны) */
+    .landscape-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: clamp(8px, 1.5vw, 18px);
+    }
+    .landscape-photo {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex: 1 1 0;
+      min-width: 0;
+      max-height: calc(100dvh - 2 * clamp(8px, 2vw, 16px));
+    }
+    .landscape-photo img {
+      max-width: 100%;
+      max-height: calc(100dvh - 2 * clamp(8px, 2vw, 16px));
+      object-fit: contain;
+      border-radius: clamp(12px, 3vw, 20px);
+      background: white;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      cursor: pointer;
+      display: block;
+    }
+    /* Активируется только при горизонтальной ориентации и достаточной ширине,
+       и только если в настройках включён split + у изделия есть фото */
+    @media (orientation: landscape) and (min-width: 760px) {
+      body.lscape-split-on .landscape-wrap {
+        flex-direction: row;
+        align-items: stretch;
+        justify-content: center;
+      }
+      body.lscape-split-on.lscape-photo-left .landscape-wrap {
+        flex-direction: row-reverse;
+      }
+      body.lscape-split-on .card {
+        flex: 0 0 auto;
+        max-width: min(560px, 50vw);
+      }
+      body.lscape-split-on.lscape-has-photo .landscape-photo {
+        display: flex;
+      }
+      /* В split-режиме скрываем дублирующее фото внутри карточки */
+      body.lscape-split-on.lscape-has-photo .scan-photo,
+      body.lscape-split-on.lscape-has-photo .packed-photo {
+        display: none !important;
+      }
     }
 
     .card-header {
@@ -970,9 +1022,11 @@
 </head>
 <body>
 
+<!-- v143: Обёртка для split-layout в горизонтальной ориентации -->
+<div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v142</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v143</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1087,6 +1141,11 @@
     </button>
   </div>
 </div>
+<!-- v143: блок фото для landscape split-режима. По умолчанию скрыт; CSS показывает в landscape когда есть фото -->
+<aside id="landscapePhoto" class="landscape-photo">
+  <img id="landscapePhotoImg" src="" alt="Изделие" onclick="if(this.src)openPhotoFullscreen(this.src)">
+</aside>
+</div><!-- /landscape-wrap -->
 
 <script>
 // ── Настройки ──
@@ -1108,6 +1167,9 @@ var settings = {
   autoFocus: true,
   bleNoFocus: true,
   autoReconnect: true,   // авто-переподключение к сканеру при обрыве
+  // v143: split-layout в горизонтальной ориентации
+  landscapeSplit: true,  // показывать фото отдельным блоком сбоку
+  photoOnLeft: false,    // false = фото справа (по умолчанию), true = фото слева
 };
 var SETTINGS_KEY = 'scannerSettings_v1';
 
@@ -1134,6 +1196,9 @@ function applySettings() {
   if (rb) rb.style.display = settings.showBasicScanner ? '' : 'none';
   if (ra) ra.style.display = settings.showAdvancedScanner ? '' : 'none';
   if (rs) rs.style.display = settings.showScanbotScanner ? '' : 'none';
+  // v143: классы body для landscape split-layout
+  document.body.classList.toggle('lscape-split-on', settings.landscapeSplit !== false);
+  document.body.classList.toggle('lscape-photo-left', !!settings.photoOnLeft);
   startAutoRefresh();
 }
 
@@ -1160,6 +1225,8 @@ function syncSettingsUI() {
   document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
   document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
   document.getElementById('setAutoReconnect').checked = settings.autoReconnect !== false;
+  document.getElementById('setLandscapeSplit').checked = settings.landscapeSplit !== false;
+  document.getElementById('setPhotoOnLeft').checked = !!settings.photoOnLeft;
   syncRefreshIntervalVisibility();
   updateSettingsPreview(settings);
 }
@@ -1217,6 +1284,8 @@ function readSettingsFromUI() {
     autoFocus: document.getElementById('setAutoFocus').checked,
     bleNoFocus: document.getElementById('setBleNoFocus').checked,
     autoReconnect: document.getElementById('setAutoReconnect').checked,
+    landscapeSplit: document.getElementById('setLandscapeSplit').checked,
+    photoOnLeft: document.getElementById('setPhotoOnLeft').checked,
   };
 }
 
@@ -1344,8 +1413,16 @@ function goIdle() {
   if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
   // Скрываем информацию о сканировании
   document.getElementById('scanInfo').classList.add('hidden');
+  _setLandscapePhoto('');
   showState('stateIdle');
   if (shouldAutoFocus()) setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
+}
+
+// v143: устанавливает фото в боковой блок (landscape split). Пустая строка — скрыть.
+function _setLandscapePhoto(url) {
+  var img = document.getElementById('landscapePhotoImg');
+  if (img) img.src = url || '';
+  document.body.classList.toggle('lscape-has-photo', !!url);
 }
 
 // Автоматически ищем при нажатии Enter в поле
@@ -1500,6 +1577,8 @@ function onSearch() {
   } else {
     photoEl.innerHTML = '<div class="no-photo">Фото не найдено</div>';
   }
+  // v143: дублируем в боковой блок для landscape split-layout
+  _setLandscapePhoto(item.photoUrl || '');
   document.getElementById('scanInfo').classList.remove('hidden');
 
   currentModel = item.model;
@@ -3298,6 +3377,24 @@ window.onload = function() {
       </label>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px">
         Работает когда «Автофокус» включён. При подключённом BLE клавиатура не появляется — сканер сам отправляет данные.
+      </div>
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🖼️ Горизонтальный режим (планшеты)</div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setLandscapeSplit" checked>
+        Показывать фото отдельным блоком сбоку
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
+        В горизонтальной ориентации (на широком экране) фото изделия отображается крупно сбоку от информации и кнопок.
+      </div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setPhotoOnLeft">
+        Фото слева (по умолчанию — справа)
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+        Поменять местами: фото слева, информация и кнопки справа.
       </div>
     </div>
 
