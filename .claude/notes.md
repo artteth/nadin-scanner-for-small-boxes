@@ -122,6 +122,7 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 | v139 | Кнопка принудительного переворота интерфейса 180° (body.ui-flipped) |
 | v140 | Сканеры: basic→html5-qrcode, advanced→jsQR HD, ScanBot→реальный Scanbot SDK v8 RTU UI |
 | v141 | «Все изделия» оптимизация для слабых устройств (2GB RAM, Android 8): chunked render rAF×50, lazy фото через IntersectionObserver, picker вместо `<select>`, debounce поиска 200мс |
+| v142 | Индикатор автообновления на главной (зелёная пульсирующая точка + время последнего обновления) под кнопкой ↻ |
 
 ---
 

@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v141</title>
+  <title>Сканер упаковки v142</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -111,6 +111,36 @@
     @keyframes refreshSpin {
       from { transform: translateY(-50%) rotate(0deg); }
       to   { transform: translateY(-50%) rotate(360deg); }
+    }
+
+    /* v142: индикатор автообновления — зелёная пульсирующая точка + время последнего обновления */
+    .auto-refresh-badge {
+      position: absolute;
+      right: 0;
+      top: calc(50% + clamp(22px, 5vw, 32px));
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: clamp(10px, 2.4vw, 12px);
+      color: #15803d;
+      background: rgba(34, 197, 94, 0.1);
+      padding: 2px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+      line-height: 1.4;
+    }
+    .auto-refresh-badge.hidden { display: none; }
+    .auto-refresh-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #22c55e;
+      animation: autoRefreshPulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes autoRefreshPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.35; transform: scale(0.85); }
     }
 
     /* ── IDLE состояние ── */
@@ -942,9 +972,13 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v141</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v142</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
+    <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
+      <span class="auto-refresh-dot"></span>
+      <span id="autoRefreshTime">—:—</span>
+    </div>
   </div>
 
   <!-- Прелоадер — показывается при загрузке данных -->
@@ -1341,6 +1375,8 @@ function preloadAllData() {
         buildDynamicPackTypes();
         renderPackButtons();
         dataLoaded = true;
+        _lastRefreshAt = Date.now();
+        _updateAutoRefreshBadge();
         if (shouldAutoFocus()) document.getElementById('barcodeInput').focus();
       }
     });
@@ -1356,6 +1392,7 @@ function showPreloader(show) {
 // ── Фоновое обновление данных (без блокировки UI) ──
 var _refreshRunning = false;
 var _autoRefreshTimer = null;
+var _lastRefreshAt = null; // timestamp последнего успешного обновления
 
 function refreshData() {
   if (_refreshRunning) return;
@@ -1374,6 +1411,8 @@ function refreshData() {
         renderPackButtons();
       }
       dataLoaded = true;
+      _lastRefreshAt = Date.now();
+      _updateAutoRefreshBadge();
       // Если открыта таблица — перерисовываем её тоже
       var tbl = document.getElementById('tableView');
       if (tbl && tbl.classList.contains('active')) renderTableView();
@@ -1383,9 +1422,33 @@ function refreshData() {
 
 function startAutoRefresh() {
   if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+  _updateAutoRefreshBadge();
   if (!settings.autoRefresh) return;
   var ms = (settings.autoRefreshInterval || 5) * 60 * 1000;
   _autoRefreshTimer = setInterval(refreshData, ms);
+}
+
+// v142: индикатор автообновления — обновляет видимость и текст времени
+function _updateAutoRefreshBadge() {
+  var badge = document.getElementById('autoRefreshBadge');
+  var timeEl = document.getElementById('autoRefreshTime');
+  if (!badge || !timeEl) return;
+  if (!settings.autoRefresh) {
+    badge.classList.add('hidden');
+    return;
+  }
+  badge.classList.remove('hidden');
+  if (_lastRefreshAt) {
+    var d = new Date(_lastRefreshAt);
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    timeEl.textContent = hh + ':' + mm;
+    badge.title = 'Автообновление каждые ' + (settings.autoRefreshInterval || 5) +
+                  ' мин · последнее в ' + hh + ':' + mm;
+  } else {
+    timeEl.textContent = '—:—';
+    badge.title = 'Автообновление каждые ' + (settings.autoRefreshInterval || 5) + ' мин · ещё не выполнялось';
+  }
 }
 
 function onSearch() {
