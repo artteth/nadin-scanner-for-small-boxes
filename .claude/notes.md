@@ -121,6 +121,30 @@ document.addEventListener('touchstart', function(){}, {passive: true});
 | v138 | BLE авто-реконнект при обрыве: до 12 попыток по 5 сек, тогл в настройках |
 | v139 | Кнопка принудительного переворота интерфейса 180° (body.ui-flipped) |
 | v140 | Сканеры: basic→html5-qrcode, advanced→jsQR HD, ScanBot→реальный Scanbot SDK v8 RTU UI |
+| v141 | «Все изделия» оптимизация для слабых устройств (2GB RAM, Android 8): chunked render rAF×50, lazy фото через IntersectionObserver, picker вместо `<select>`, debounce поиска 200мс |
+
+---
+
+## v141 — оптимизация «Все изделия» для слабых устройств
+
+**Цель:** работа на планшете с 2 ГБ ОЗУ, CPU 1.4 ГГц, Android 8.
+
+**Узкие места до оптимизации:**
+1. `<select>` в каждой строке (~10–20 опций × N строк = тысячи DOM-узлов). Нативный `<select>` особенно тяжёл в Android 8 webview.
+2. Все строки рендерились одним `innerHTML` → блокировка главного потока на сотни мс.
+3. Все `<img>` создавались сразу, даже с `loading="lazy"`.
+4. Поиск ререндерил всю таблицу на каждый символ (`oninput="renderTableView()"`).
+
+**Что изменено в `index.html`:**
+- `renderTableView()` рендерит чанками по 50 строк через `requestAnimationFrame`. Токен `_renderToken` отменяет старый рендер, если пришёл новый запрос.
+- Вместо `<select>` в строке — `<div class="tbl-pack-cell">value</div>` с CSS-стрелкой `▾`. Клик открывает общий модальный picker (один на всю таблицу).
+- Фото — `<div class="tbl-thumb-lazy" data-src="...">` плейсхолдер. `IntersectionObserver` подменяет на `<img>` при попадании во viewport (rootMargin 200px).
+- `tblSearchInput()` debounce 200мс перед `renderTableView()`.
+- Убраны `transition: background 0.1s` и `:hover` на tr — не нужны на тач-устройствах.
+
+**Что не тронуто:** GAS-API, формат данных, чекбокс «упаковано», логика сохранения, пагинация (её нет — всё одной таблицей, но рендер теперь не блокирующий).
+
+**Если IntersectionObserver не поддерживается** (древний webview): фолбэк — все картинки грузятся сразу.
 
 ---
 

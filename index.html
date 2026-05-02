@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v140</title>
+  <title>Сканер упаковки v141</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -438,21 +438,34 @@
       white-space: nowrap;
     }
     .tbl-table thead th.tbl-center { text-align: center; }
-    .tbl-table tbody tr { border-bottom: 1px solid #f3f4f6; background: white; transition: background 0.1s; }
+    .tbl-table tbody tr { border-bottom: 1px solid #f3f4f6; background: white; }
     .tbl-table tbody tr:last-child { border-bottom: none; }
-    .tbl-table tbody tr:hover { background: #f9fafb; }
     .tbl-table tbody tr.is-packed { background: #f0fdf4; }
-    .tbl-table tbody tr.is-packed:hover { background: #dcfce7; }
     .tbl-table tbody tr.tbl-changed { background: #fefce8; }
     .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
     .tbl-model { font-family: monospace; font-weight: 600; }
     .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
-    .tbl-pack-sel {
-      height: 30px; border: 1.5px solid #d1d5db; border-radius: 6px;
+    /* v141: placeholder вместо <img> до момента, когда строка попадёт во viewport */
+    .tbl-thumb-lazy { width: 38px; height: 38px; border-radius: 6px; background: #f3f4f6; display: block; }
+    /* v141: ячейка типа упаковки вместо <select> в каждой строке */
+    .tbl-pack-cell {
+      display: inline-block;
+      min-height: 30px; line-height: 28px;
+      border: 1.5px solid #d1d5db; border-radius: 6px;
       background: #f9fafb; color: #111827; font-size: 12px;
-      padding: 0 6px; cursor: pointer; max-width: 170px; width: 100%;
+      padding: 0 22px 0 8px;
+      cursor: pointer; max-width: 170px; width: 100%;
+      position: relative;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      box-sizing: border-box;
     }
-    .tbl-pack-sel:focus { outline: none; border-color: #15803d; }
+    .tbl-pack-cell::after {
+      content: '▾';
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      color: #6b7280; font-size: 11px;
+    }
+    .tbl-pack-cell:active { background: #e5e7eb; }
+    .tbl-pack-empty { color: #9ca3af; }
     .tbl-save-btn {
       height: 28px; padding: 0 10px; font-size: 12px;
       border: 1.5px solid #15803d; border-radius: 6px;
@@ -462,9 +475,69 @@
     .tbl-save-btn:disabled { opacity: 0.6; cursor: default; }
     .tbl-empty { padding: 40px; text-align: center; color: #9ca3af; font-size: 15px; }
     @media (max-width: 480px) {
-      .tbl-thumb { width: 26px; height: 26px; }
-      .tbl-pack-sel { max-width: 110px; font-size: 11px; }
+      .tbl-thumb, .tbl-thumb-lazy { width: 26px; height: 26px; }
+      .tbl-pack-cell { max-width: 110px; font-size: 11px; }
     }
+
+    /* v141: Picker типа упаковки — общий модал вместо <select> в каждой строке */
+    .pack-picker-overlay {
+      position: fixed; inset: 0; z-index: 60000;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .pack-picker-overlay.active { display: flex; }
+    .pack-picker-panel {
+      background: white; width: 100%; max-width: 500px;
+      max-height: 75vh;
+      border-radius: 14px 14px 0 0;
+      display: flex; flex-direction: column;
+      animation: pack-picker-slide 0.2s ease-out;
+    }
+    @keyframes pack-picker-slide {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .pack-picker-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      font-weight: 600; font-size: 15px;
+      display: flex; align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .pack-picker-close {
+      background: none; border: none; font-size: 26px; line-height: 1;
+      color: #6b7280; cursor: pointer; padding: 0 6px;
+    }
+    .pack-picker-list {
+      overflow-y: auto;
+      padding: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .pack-picker-btn {
+      display: block; width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      margin-bottom: 6px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      background: white;
+      font-size: 14px;
+      color: #111827;
+      cursor: pointer;
+      white-space: normal;
+    }
+    .pack-picker-btn:active { background: #f3f4f6; transform: scale(0.99); }
+    .pack-picker-btn.pack-picker-current {
+      border-color: #15803d;
+      background: #f0fdf4;
+      color: #15803d;
+      font-weight: 600;
+    }
+    .pack-picker-clear { color: #9ca3af; font-style: italic; }
+    .pack-picker-clear.pack-picker-current { color: #15803d; font-style: normal; }
 
     /* ── КАМЕРА ── */
     .camera-overlay {
@@ -869,7 +942,7 @@
 
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v140</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v141</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
   </div>
@@ -1657,10 +1730,27 @@ function getTableModels() {
   return models;
 }
 
+// ── v141: Оптимизация для слабых устройств ──
+// 1) Чанкованный рендер (по 50 строк через rAF) — UI не блокируется при загрузке
+// 2) Замена <select> на ячейку-кликушку + общий picker — экономит тысячи DOM-узлов
+// 3) Lazy-изображения через IntersectionObserver — фото подгружаются по мере прокрутки
+// 4) Debounce поиска (200мс) — не ререндерит таблицу на каждое нажатие клавиши
+var _renderToken = 0;       // счётчик; при новом рендере отменяет предыдущий
+var _lazyImageObserver = null;
+var _searchDebounceTimer = null;
+var _packPickerModel = null;
+
 function renderTableView() {
+  var token = ++_renderToken;
   var models = getTableModels();
   var tbody = document.getElementById('tblBody');
   var empty = document.getElementById('tblEmpty');
+
+  // Останавливаем старый observer
+  if (_lazyImageObserver) {
+    try { _lazyImageObserver.disconnect(); } catch(e) {}
+    _lazyImageObserver = null;
+  }
 
   if (!models.length) {
     tbody.innerHTML = '';
@@ -1668,49 +1758,148 @@ function renderTableView() {
     return;
   }
   empty.style.display = 'none';
+  tbody.innerHTML = '';
 
-  tbody.innerHTML = models.map(function(item) {
-    var isChanged = tableChangedModels.has(item.model);
-    var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
-    var photoHtml = item.photoUrl
-      ? '<img class="tbl-thumb" loading="lazy" src="' + esc(item.photoUrl) + '" onclick="openPhotoFullscreen(\'' + esc(item.photoUrl) + '\')" onerror="this.style.display=\'none\'">'
-      : '';
-    // Если текущий packType товара не входит в список — добавляем его отдельно,
-    // чтобы он показывался как выбранная опция, а не пропадал
-    var packOptsList = TABLE_PACK_TYPES.slice();
-    if (item.packType && packOptsList.indexOf(item.packType) === -1) {
-      packOptsList.unshift(item.packType);
+  var CHUNK_SIZE = 50;
+  var i = 0;
+
+  function renderChunk() {
+    if (token !== _renderToken) return; // запрос отменён новым рендером
+    var end = Math.min(i + CHUNK_SIZE, models.length);
+    var html = '';
+    for (var j = i; j < end; j++) html += _rowHtml(models[j]);
+    tbody.insertAdjacentHTML('beforeend', html);
+    i = end;
+    if (i < models.length) {
+      requestAnimationFrame(renderChunk);
+    } else {
+      _initLazyImages();
     }
-    var packOpts = '<option value="">—</option>' + packOptsList.map(function(pt) {
-      return '<option value="' + esc(pt) + '"' + (item.packType === pt ? ' selected' : '') + '>' + esc(pt) + '</option>';
-    }).join('');
-    var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
-    return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
-      + '<td class="tbl-model">' + esc(item.model) + '</td>'
-      + '<td class="tbl-col-photo">' + photoHtml + '</td>'
-      + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
-      + '<td><select class="tbl-pack-sel">' + packOpts + '</select></td>'
-      + '<td>' + saveBtn + '</td>'
-      + '</tr>';
+  }
+  renderChunk();
+}
+
+function _rowHtml(item) {
+  var isChanged = tableChangedModels.has(item.model);
+  var cls = isChanged ? 'tbl-changed' : (item.repacked ? 'is-packed' : '');
+  // Фото — placeholder без <img>; реальный тег создаётся при скролле
+  var photoHtml = item.photoUrl
+    ? '<div class="tbl-thumb-lazy" data-src="' + esc(item.photoUrl) + '"></div>'
+    : '';
+  var packDisplay = item.packType
+    ? esc(item.packType)
+    : '<span class="tbl-pack-empty">—</span>';
+  var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+  return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
+    + '<td class="tbl-model">' + esc(item.model) + '</td>'
+    + '<td class="tbl-col-photo">' + photoHtml + '</td>'
+    + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
+    + '<td><div class="tbl-pack-cell" data-current-value="' + esc(item.packType || '') + '">' + packDisplay + '</div></td>'
+    + '<td class="tbl-save-cell">' + saveBtn + '</td>'
+    + '</tr>';
+}
+
+function _initLazyImages() {
+  // Старые Android-вебвью могут не иметь IntersectionObserver — загружаем все сразу
+  if (typeof IntersectionObserver === 'undefined') {
+    document.querySelectorAll('.tbl-thumb-lazy').forEach(_swapLazyToImg);
+    return;
+  }
+  _lazyImageObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        _swapLazyToImg(entry.target);
+        _lazyImageObserver.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: '200px' });
+  document.querySelectorAll('.tbl-thumb-lazy').forEach(function(el) {
+    _lazyImageObserver.observe(el);
+  });
+}
+
+function _swapLazyToImg(el) {
+  var src = el.dataset.src;
+  if (!src || !el.parentNode) return;
+  var img = document.createElement('img');
+  img.className = 'tbl-thumb';
+  img.src = src;
+  img.onclick = function() { openPhotoFullscreen(src); };
+  img.onerror = function() { img.style.display = 'none'; };
+  el.parentNode.replaceChild(img, el);
+}
+
+// Debounce поиска — не дёргаем рендер на каждое нажатие
+function tblSearchInput() {
+  clearTimeout(_searchDebounceTimer);
+  _searchDebounceTimer = setTimeout(renderTableView, 200);
+}
+
+// ── Picker для типа упаковки (вместо <select> в каждой строке) ──
+function openPackPicker(model, currentValue) {
+  _packPickerModel = model;
+  var overlay = document.getElementById('packPickerOverlay');
+  var list = document.getElementById('packPickerList');
+  var items = TABLE_PACK_TYPES.slice();
+  if (currentValue && items.indexOf(currentValue) === -1) items.unshift(currentValue);
+
+  var html = '<button class="pack-picker-btn pack-picker-clear' +
+             (currentValue ? '' : ' pack-picker-current') +
+             '" data-value="">— Не выбрано —</button>';
+  html += items.map(function(t) {
+    var isCurrent = currentValue === t;
+    return '<button class="pack-picker-btn' + (isCurrent ? ' pack-picker-current' : '') +
+           '" data-value="' + esc(t) + '">' + esc(t) + '</button>';
   }).join('');
+  list.innerHTML = html;
+  overlay.classList.add('active');
+}
+
+function closePackPicker() {
+  document.getElementById('packPickerOverlay').classList.remove('active');
+  _packPickerModel = null;
+}
+
+function _onPackPickerClick(e) {
+  if (e.target === document.getElementById('packPickerOverlay')) {
+    closePackPicker();
+    return;
+  }
+  var btn = e.target.closest('.pack-picker-btn');
+  if (!btn) return;
+  var value = btn.dataset.value || '';
+  var model = _packPickerModel;
+  closePackPicker();
+  if (model) {
+    var tr = document.querySelector('#tblBody tr[data-model="' + esc(model) + '"]');
+    if (tr) tblSetPackType(model, value, tr);
+  }
 }
 
 // Делегирование событий таблицы — регистрируется после загрузки DOM
 function initTableEvents() {
-  document.getElementById('tblBody').addEventListener('change', function(e) {
+  var tbody = document.getElementById('tblBody');
+  tbody.addEventListener('change', function(e) {
     var tr = e.target.closest('tr[data-model]');
     if (!tr) return;
-    var model = tr.dataset.model;
     if (e.target.type === 'checkbox') {
-      tblSetRepacked(model, e.target.checked, tr);
-    } else if (e.target.classList.contains('tbl-pack-sel')) {
-      tblSetPackType(model, e.target.value, tr);
+      tblSetRepacked(tr.dataset.model, e.target.checked, tr);
     }
   });
-  document.getElementById('tblBody').addEventListener('click', function(e) {
-    if (!e.target.classList.contains('tbl-save-btn')) return;
-    var tr = e.target.closest('tr[data-model]');
-    if (tr) saveTableItem(tr.dataset.model, e.target);
+  tbody.addEventListener('click', function(e) {
+    // Кнопка «Записать»
+    if (e.target.classList.contains('tbl-save-btn')) {
+      var tr1 = e.target.closest('tr[data-model]');
+      if (tr1) saveTableItem(tr1.dataset.model, e.target);
+      return;
+    }
+    // Ячейка типа упаковки → открыть picker
+    var packCell = e.target.closest('.tbl-pack-cell');
+    if (packCell) {
+      var tr2 = packCell.closest('tr[data-model]');
+      if (tr2) openPackPicker(tr2.dataset.model, packCell.dataset.currentValue || '');
+      return;
+    }
   });
 }
 
@@ -1728,6 +1917,12 @@ function tblSetPackType(model, packType, tr) {
     if (barcodeToModel[bc].model === model) barcodeToModel[bc].packType = packType;
   });
   tableChangedModels.add(model);
+  // Точечно обновляем ячейку без полного перерендера
+  var cell = tr.querySelector('.tbl-pack-cell');
+  if (cell) {
+    cell.dataset.currentValue = packType || '';
+    cell.innerHTML = packType ? esc(packType) : '<span class="tbl-pack-empty">—</span>';
+  }
   tblRefreshRow(tr, model);
 }
 
@@ -3136,7 +3331,7 @@ window.onload = function() {
   </div>
   <div class="tbl-tabs-wrap" id="tblTabsWrap"></div>
   <div class="tbl-search-wrap">
-    <input type="text" id="tblSearch" placeholder="🔍 Поиск по номеру модели..." oninput="renderTableView()">
+    <input type="text" id="tblSearch" placeholder="🔍 Поиск по номеру модели..." oninput="tblSearchInput()">
   </div>
   <div class="tbl-scroll">
     <table class="tbl-table">
@@ -3251,6 +3446,17 @@ window.onload = function() {
 
 <!-- ── BLE: тост-уведомление ── -->
 <div id="bleToast" class="ble-toast"></div>
+
+<!-- v141: picker для типа упаковки в таблице «Все изделия» (вместо <select> в каждой строке) -->
+<div id="packPickerOverlay" class="pack-picker-overlay" onclick="_onPackPickerClick(event)">
+  <div class="pack-picker-panel">
+    <div class="pack-picker-header">
+      <span>Тип упаковки</span>
+      <button class="pack-picker-close" onclick="closePackPicker()" aria-label="Закрыть">×</button>
+    </div>
+    <div id="packPickerList" class="pack-picker-list"></div>
+  </div>
+</div>
 
 </body>
 </html>
