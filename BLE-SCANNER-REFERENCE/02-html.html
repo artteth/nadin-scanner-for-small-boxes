@@ -1,0 +1,106 @@
+<!-- ════════════════════════════════════════════════════════════════
+     BLE SCANNER — HTML РАЗМЕТКА
+     Вставьте этот HTML перед закрывающим тегом </body>.
+     ════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Плавающая кнопка (FAB) — нажать чтобы открыть панель ── -->
+<button id="bleFab" class="ble-fab" onclick="openBlePanel()" title="Bluetooth сканер">
+  ᯤ
+</button>
+
+<!-- ── Панель управления BLE сканером ── -->
+<div id="blePanelOverlay" class="ble-panel-overlay" onclick="if(event.target===this)closeBlePanel()">
+  <div class="ble-panel">
+
+    <!-- Заголовок -->
+    <div class="ble-panel-header">
+      <span class="ble-panel-title">📡 BLE Сканер</span>
+      <button class="ble-close-btn" onclick="closeBlePanel()">✕</button>
+    </div>
+
+    <!-- Статус подключения -->
+    <div class="ble-status-row">
+      <div class="ble-dot" id="bleDot"></div>
+      <span id="bleStatusText">Не подключён</span>
+    </div>
+    <!-- Имя устройства (показывается когда подключён или есть сохранённое) -->
+    <div class="ble-device-name" id="bleDeviceName" style="display:none"></div>
+
+    <!-- Кнопки управления -->
+    <!-- Кнопка подключения (скрыта когда подключён) -->
+    <button id="bleConnectBtn" class="ble-btn ble-btn-primary" onclick="bleConnect()">
+      🔗 Подключить сканер
+    </button>
+    <!-- Выбрать другой сканер (показывается только если есть сохранённое устройство) -->
+    <button id="bleOtherBtn" class="ble-btn ble-btn-secondary" onclick="ble.connectManual()" style="display:none">
+      🔍 Выбрать другой сканер
+    </button>
+    <!-- Отключить (показывается только когда подключён) -->
+    <button id="bleDisconnectBtn" class="ble-btn ble-btn-danger" onclick="bleDisconnect()" style="display:none">
+      ⛔ Отключить
+    </button>
+    <!-- Забыть устройство (показывается если не подключён и есть сохранённое имя) -->
+    <button id="bleForgetBtn" class="ble-btn ble-btn-secondary" onclick="ble.forgetDevice()" style="display:none;font-size:14px;color:#9ca3af">
+      🗑 Забыть устройство
+    </button>
+
+    <!-- Предупреждение для iOS / Bluefy -->
+    <div class="ble-warn">
+      <b>⚠️ Важно для iOS (Bluefy)</b><br>
+      Когда iPad показывает диалог:<br>
+      <i>«Запрос на создание пары по Bluetooth»</i><br>
+      → нажимайте <b>«Отменить»</b>, НЕ «Создать пару».<br><br>
+      Если нажать «Создать пару» — устройство привязывается к iPad и
+      <b>перестаёт отображаться в списке поиска</b>.
+    </div>
+
+    <!-- Помощь: что делать если сканер уже привязан к iOS -->
+    <div id="blePairedHelp" style="display:none">
+      <div class="ble-warn">
+        <b>🔧 Сканер уже привязан к iPad?</b>
+        <ol class="ble-steps">
+          <li>Откройте <b>Настройки iPad → Bluetooth</b></li>
+          <li>Найдите ваш сканер в списке</li>
+          <li>Нажмите ⓘ рядом с именем</li>
+          <li>Выберите <b>«Забыть это устройство»</b></li>
+          <li>Вернитесь сюда и нажмите «Подключить»</li>
+          <li>Когда iPad спросит «Создать пару» → <b>Отменить</b></li>
+        </ol>
+      </div>
+    </div>
+    <button id="blePairedHelpBtn" class="ble-btn ble-btn-secondary"
+      onclick="document.getElementById('blePairedHelp').style.display=''; this.style.display='none';"
+      style="font-size:13px">
+      ❓ Сканер не виден в списке
+    </button>
+
+    <!-- Подсказка по браузерам -->
+    <div class="ble-note">
+      <b>iOS:</b> браузер <b>Bluefy</b>&nbsp;&nbsp;|&nbsp;&nbsp;<b>Android:</b> Chrome / Edge
+    </div>
+
+    <!-- Диагностика -->
+    <button id="bleDiagToggleBtn" class="ble-btn ble-btn-secondary"
+      onclick="bleToggleDiag()" style="font-size:13px">
+      🔬 Показать лог диагностики
+    </button>
+    <div id="bleDiagBox" style="display:none">
+      <pre id="bleDiagLog" class="ble-diag-box"></pre>
+      <div class="ble-diag-row">
+        <button class="ble-btn ble-btn-secondary" onclick="bleCopyDiag()">📋 Копировать</button>
+        <button class="ble-btn ble-btn-secondary" onclick="ble.diagClear()">🗑 Очистить</button>
+      </div>
+      <div class="ble-note" style="margin-top:8px;font-size:12px">
+        <b>Сканер подключается, пикает, но коды не приходят?</b><br>
+        1. Убедитесь, что сканер в режиме <b>BLE</b> (не SPP/HID). Переключение — служебный штрих-код из инструкции.<br>
+        2. Если лог показывает «Сервисы не найдены» — скорее всего сканер в SPP-режиме.<br>
+        3. Скопируйте лог — если есть неизвестный UUID, добавьте его в массив SERVICES в JS.
+      </div>
+    </div>
+
+    <button class="ble-btn ble-btn-secondary" onclick="closeBlePanel()" style="margin-top:6px">Закрыть</button>
+  </div>
+</div>
+
+<!-- ── Тост-уведомление (мелькает вверху при получении кода) ── -->
+<div id="bleToast" class="ble-toast"></div>

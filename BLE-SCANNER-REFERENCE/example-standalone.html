@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BLE Scanner — Пример</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f9fafb;
+  color: #111827;
+  min-height: 100vh;
+}
+
+/* ── Основной контент страницы ── */
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 32px 20px 100px;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 32px;
+}
+.result-box {
+  background: white;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+  margin-bottom: 16px;
+}
+.result-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.result-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+  min-height: 40px;
+  word-break: break-all;
+}
+.result-value.empty { color: #d1d5db; font-size: 18px; font-weight: 400; }
+
+.history-list {
+  list-style: none;
+  padding: 0;
+}
+.history-list li {
+  font-size: 14px;
+  color: #374151;
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+.history-list li:last-child { border-bottom: none; }
+.history-empty { font-size: 14px; color: #d1d5db; }
+
+.how-to {
+  background: #f0f9ff;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 13px;
+  color: #0369a1;
+  line-height: 1.6;
+}
+.how-to b { color: #0c4a6e; }
+
+/* ════════════════════════════════════════════════════════
+   BLE CSS (вставьте в ваш проект)
+   ════════════════════════════════════════════════════════ */
+
+.ble-fab {
+  position: fixed;
+  bottom: max(24px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+  right: max(20px, calc(env(safe-area-inset-right, 0px) + 16px));
+  z-index: 60000;
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.08);
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 22px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.25s, box-shadow 0.25s;
+  -webkit-tap-highlight-color: transparent;
+}
+.ble-fab.ble-connected {
+  background: #15803d;
+  color: white;
+  border-color: transparent;
+  animation: bleGlow 2.4s ease-in-out infinite;
+}
+@keyframes bleGlow {
+  0%, 100% { box-shadow: 0 4px 16px rgba(21,128,61,0.35); }
+  50%       { box-shadow: 0 4px 28px rgba(21,128,61,0.70); }
+}
+.ble-fab:active { transform: scale(0.90); }
+
+.ble-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100002;
+  background: rgba(0,0,0,0.55);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ble-panel-overlay.active { display: flex; }
+.ble-panel {
+  background: white;
+  width: 100%;
+  max-width: min(600px, 100vw);
+  border-radius: 20px 20px 0 0;
+  padding: clamp(16px, 4vw, 28px);
+  padding-bottom: max(clamp(16px, 4vw, 28px), env(safe-area-inset-bottom));
+  overflow-y: auto;
+  max-height: 90vh;
+}
+.ble-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.ble-panel-title { font-size: 18px; font-weight: 700; }
+.ble-close-btn {
+  background: none; border: none; font-size: 20px;
+  color: #6b7280; cursor: pointer; padding: 4px 8px;
+}
+.ble-status-row {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 16px; font-weight: 600; color: #111827; margin-bottom: 8px;
+}
+.ble-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  background: #d1d5db; flex-shrink: 0; transition: background 0.3s;
+}
+.ble-dot.on { background: #15803d; }
+.ble-device-name { font-size: 13px; color: #6b7280; margin-bottom: 18px; padding-left: 25px; }
+.ble-note {
+  background: #f0f9ff; border-radius: 10px; padding: 11px 14px;
+  font-size: 13px; color: #0369a1; margin: 14px 0; line-height: 1.5;
+}
+.ble-warn {
+  background: #fef3c7; border-radius: 10px; padding: 11px 14px;
+  font-size: 13px; color: #92400e; margin: 10px 0; line-height: 1.6;
+}
+.ble-warn b { color: #7c2d12; }
+.ble-steps { margin: 6px 0 0 0; padding-left: 18px; color: #92400e; }
+.ble-steps li { margin-bottom: 3px; }
+.ble-btn {
+  display: block; width: 100%; padding: 13px 16px;
+  border: none; border-radius: 10px; font-size: 15px; font-weight: 600;
+  cursor: pointer; margin-top: 8px;
+  -webkit-tap-highlight-color: transparent; transition: opacity 0.15s;
+}
+.ble-btn:active { opacity: 0.75; }
+.ble-btn:disabled { opacity: 0.5; pointer-events: none; }
+.ble-btn-primary   { background: #2563eb; color: white; }
+.ble-btn-danger    { background: #dc2626; color: white; }
+.ble-btn-secondary { background: #f3f4f6; color: #374151; }
+.ble-diag-box {
+  background: #0b1220; color: #d1fae5; border-radius: 10px;
+  padding: 10px 12px; margin-top: 8px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px; line-height: 1.45; max-height: 260px;
+  overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+}
+.ble-diag-row { display: flex; gap: 6px; margin-top: 6px; }
+.ble-diag-row .ble-btn { font-size: 13px; padding: 8px 10px; flex: 1; }
+.ble-toast {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%) translateY(-90px);
+  z-index: 100010;
+  background: #1e293b; color: white;
+  padding: 10px 22px; border-radius: 22px;
+  font-size: 14px; font-weight: 600;
+  white-space: nowrap; max-width: calc(100vw - 32px);
+  overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+.ble-toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════
+     Основной контент страницы
+     ════════════════════════ -->
+<div class="app">
+  <h1>BLE Scanner Demo</h1>
+  <p class="subtitle">Нажмите кнопку ᯤ (внизу справа), подключите Bluetooth-сканер и отсканируйте любой штрих-код.</p>
+
+  <div class="result-box">
+    <div class="result-label">Последний код</div>
+    <div class="result-value empty" id="lastCode">— ожидание —</div>
+  </div>
+
+  <div class="result-box">
+    <div class="result-label">История</div>
+    <ul class="history-list" id="historyList">
+      <li class="history-empty">Нет отсканированных кодов</li>
+    </ul>
+  </div>
+
+  <div class="how-to">
+    <b>Как подключить:</b><br>
+    1. Нажмите кнопку <b>ᯤ</b> внизу справа<br>
+    2. Нажмите <b>«Подключить сканер»</b><br>
+    3. Выберите свой сканер в диалоге браузера<br>
+    4. Сканируйте штрих-коды — они появятся здесь<br><br>
+    <b>Браузеры:</b> Android Chrome/Edge, iOS → <b>Bluefy</b>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     BLE HTML (вставьте перед </body>)
+     ════════════════════════════════════ -->
+
+<!-- Плавающая кнопка -->
+<button id="bleFab" class="ble-fab" onclick="openBlePanel()" title="Bluetooth сканер">
+  ᯤ
+</button>
+
+<!-- Панель управления -->
+<div id="blePanelOverlay" class="ble-panel-overlay" onclick="if(event.target===this)closeBlePanel()">
+  <div class="ble-panel">
+    <div class="ble-panel-header">
+      <span class="ble-panel-title">📡 BLE Сканер</span>
+      <button class="ble-close-btn" onclick="closeBlePanel()">✕</button>
+    </div>
+    <div class="ble-status-row">
+      <div class="ble-dot" id="bleDot"></div>
+      <span id="bleStatusText">Не подключён</span>
+    </div>
+    <div class="ble-device-name" id="bleDeviceName" style="display:none"></div>
+    <button id="bleConnectBtn" class="ble-btn ble-btn-primary" onclick="bleConnect()">🔗 Подключить сканер</button>
+    <button id="bleOtherBtn" class="ble-btn ble-btn-secondary" onclick="ble.connectManual()" style="display:none">🔍 Выбрать другой сканер</button>
+    <button id="bleDisconnectBtn" class="ble-btn ble-btn-danger" onclick="bleDisconnect()" style="display:none">⛔ Отключить</button>
+    <button id="bleForgetBtn" class="ble-btn ble-btn-secondary" onclick="ble.forgetDevice()" style="display:none;font-size:14px;color:#9ca3af">🗑 Забыть устройство</button>
+    <div class="ble-warn">
+      <b>⚠️ Важно для iOS (Bluefy)</b><br>
+      Когда показывает «Создать пару» → нажмите <b>«Отменить»</b>.<br>
+      Если нажать «Создать пару» — сканер исчезнет из списка.
+    </div>
+    <div id="blePairedHelp" style="display:none">
+      <div class="ble-warn">
+        <b>🔧 Сканер привязан к iOS?</b>
+        <ol class="ble-steps">
+          <li>Настройки → Bluetooth → ⓘ рядом со сканером</li>
+          <li>«Забыть устройство»</li>
+          <li>Вернитесь, нажмите «Подключить»</li>
+          <li>На вопрос «Создать пару» → <b>Отменить</b></li>
+        </ol>
+      </div>
+    </div>
+    <button id="blePairedHelpBtn" class="ble-btn ble-btn-secondary"
+      onclick="document.getElementById('blePairedHelp').style.display=''; this.style.display='none';"
+      style="font-size:13px">❓ Сканер не виден в списке</button>
+    <div class="ble-note"><b>iOS:</b> браузер <b>Bluefy</b>&nbsp;&nbsp;|&nbsp;&nbsp;<b>Android:</b> Chrome / Edge</div>
+    <button id="bleDiagToggleBtn" class="ble-btn ble-btn-secondary" onclick="bleToggleDiag()" style="font-size:13px">🔬 Показать лог диагностики</button>
+    <div id="bleDiagBox" style="display:none">
+      <pre id="bleDiagLog" class="ble-diag-box"></pre>
+      <div class="ble-diag-row">
+        <button class="ble-btn ble-btn-secondary" onclick="bleCopyDiag()">📋 Копировать</button>
+        <button class="ble-btn ble-btn-secondary" onclick="ble.diagClear()">🗑 Очистить</button>
+      </div>
+    </div>
+    <button class="ble-btn ble-btn-secondary" onclick="closeBlePanel()" style="margin-top:6px">Закрыть</button>
+  </div>
+</div>
+
+<!-- Тост -->
+<div id="bleToast" class="ble-toast"></div>
+
+
+<!-- ════════════════════════════════════
+     BLE JavaScript
+     ════════════════════════════════════ -->
+<script>
+// ════════ BLE объект ════════
+var ble = {
+  device: null, server: null, connected: false,
+  lastText: '', lastTime: 0, dedupeMs: 2000,
+  savedDeviceName: '', BLE_DEV_KEY: 'bleLastDevice_v1',
+  _manualDisconnect: false, _reconnectTimer: null,
+  _reconnectAttempts: 0, _reconnectMax: 12, _reconnectIntervalMs: 5000,
+
+  SERVICES: [
+    '6e400001-b5a3-f393-e0a9-e50e24dcca9e','6e400002-b5a3-f393-e0a9-e50e24dcca9e','6e400003-b5a3-f393-e0a9-e50e24dcca9e',
+    '0000ffe0-0000-1000-8000-00805f9b34fb','0000ffe1-0000-1000-8000-00805f9b34fb','0000ffe2-0000-1000-8000-00805f9b34fb','0000ffe3-0000-1000-8000-00805f9b34fb',
+    '0000dfb0-0000-1000-8000-00805f9b34fb','0000dfb1-0000-1000-8000-00805f9b34fb','0000dfb2-0000-1000-8000-00805f9b34fb',
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455','49535343-1e4d-4bd9-ba61-23c647249616','49535343-8841-43f4-a8d4-ecbe34729bb3','49535343-4c8a-39b3-2f49-511cff073b7e','49535343-aca3-481c-91ec-d85e28a60318',
+    '0000fff0-0000-1000-8000-00805f9b34fb','0000fff1-0000-1000-8000-00805f9b34fb','0000fff2-0000-1000-8000-00805f9b34fb','0000fff3-0000-1000-8000-00805f9b34fb','0000fff4-0000-1000-8000-00805f9b34fb','0000fff5-0000-1000-8000-00805f9b34fb','0000fff6-0000-1000-8000-00805f9b34fb',
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2','bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
+    '49535343-c9d0-cc83-a44a-6fe238d06d33','0000fefb-0000-1000-8000-00805f9b34fb',
+    '453a1000-63b1-c3d4-4a5c-87e5b40a74a1','453a1001-63b1-c3d4-4a5c-87e5b40a74a1',
+    '0000fee0-0000-1000-8000-00805f9b34fb','0000fee1-0000-1000-8000-00805f9b34fb','0000fee7-0000-1000-8000-00805f9b34fb','0000fee8-0000-1000-8000-00805f9b34fb','0000fee9-0000-1000-8000-00805f9b34fb','0000feea-0000-1000-8000-00805f9b34fb',
+    '0000180a-0000-1000-8000-00805f9b34fb','0000180f-0000-1000-8000-00805f9b34fb',
+  ],
+
+  diag: [],
+  diagLog: function(msg) {
+    var t = new Date().toTimeString().slice(0,8);
+    this.diag.push('['+t+'] '+msg);
+    if (this.diag.length > 50) this.diag.shift();
+    bleRenderDiag();
+  },
+  diagClear: function() { this.diag = []; bleRenderDiag(); },
+
+  loadSavedDevice: function() {
+    try { this.savedDeviceName = localStorage.getItem(this.BLE_DEV_KEY) || ''; } catch(e) {}
+  },
+  saveDevice: function() {
+    try { if (this.device && this.device.name) { this.savedDeviceName = this.device.name; localStorage.setItem(this.BLE_DEV_KEY, this.device.name); } } catch(e) {}
+  },
+  forgetDevice: function() {
+    this.savedDeviceName = '';
+    try { localStorage.removeItem(this.BLE_DEV_KEY); } catch(e) {}
+    this.updateUI();
+  },
+
+  reconnect: async function() {
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return false;
+    if (!this.savedDeviceName) return false;
+    try {
+      var devices = await navigator.bluetooth.getDevices();
+      var found = null;
+      for (var i = 0; i < devices.length; i++) { if (devices[i].name === this.savedDeviceName) { found = devices[i]; break; } }
+      if (!found) return false;
+      this.device = found;
+      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      try {
+        this.server = await found.gatt.connect();
+        await this.setupNotifications();
+        this.connected = true; this.saveDevice(); this.updateUI(); return true;
+      } catch(e) {}
+      if (!found.watchAdvertisements) return false;
+      return await new Promise(function(resolve) {
+        var timer = setTimeout(function() { try { found.stopWatchingAdvertisements(); } catch(e) {} resolve(false); }, 8000);
+        found.addEventListener('advertisementreceived', async function handler() {
+          found.removeEventListener('advertisementreceived', handler);
+          clearTimeout(timer);
+          try { found.stopWatchingAdvertisements(); } catch(e) {}
+          try { ble.server = await found.gatt.connect(); await ble.setupNotifications(); ble.connected = true; ble.saveDevice(); ble.updateUI(); resolve(true); } catch(e) { resolve(false); }
+        });
+        found.watchAdvertisements().catch(function() { clearTimeout(timer); resolve(false); });
+      });
+    } catch(e) { return false; }
+  },
+
+  connect: async function() {
+    if (!navigator.bluetooth) { bleSetStatus('⚠️ Web Bluetooth не поддерживается. iOS→Bluefy, Android→Chrome/Edge.'); return; }
+    this.diagClear();
+    this.diagLog('▶ Старт. UA: ' + (navigator.userAgent.match(/Android|iPhone|iPad/i)||['?'])[0]);
+    var btn = document.getElementById('bleConnectBtn');
+    if (btn) { btn.textContent = '⏳ Подключение...'; btn.disabled = true; }
+    var reconnected = await this.reconnect();
+    if (reconnected) { closeBlePanel(); bleToast('🔗 Автоподключение: ' + (this.device.name||'Сканер')); return; }
+    if (btn) btn.textContent = '⏳ Выберите устройство...';
+    try {
+      var params = this.savedDeviceName
+        ? { filters: [{name: this.savedDeviceName}], optionalServices: this.SERVICES }
+        : { acceptAllDevices: true, optionalServices: this.SERVICES };
+      this.device = await navigator.bluetooth.requestDevice(params);
+      if (btn) btn.textContent = '⏳ Подключение...';
+      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      this.server = await this.device.gatt.connect();
+      await this.setupNotifications();
+      this.connected = true; this.stopAutoReconnect(); this.saveDevice(); this.updateUI();
+      closeBlePanel(); bleToast('🔗 Подключён: ' + (this.device.name||'Сканер'));
+    } catch(e) {
+      if (e.name === 'NotFoundError' && this.savedDeviceName) bleSetStatus('«'+this.savedDeviceName+'» не найден. Убедитесь, что сканер включён.');
+      else if (e.name !== 'NotFoundError') bleSetStatus('⚠️ ' + (e.message||e));
+      if (btn) { btn.textContent = '🔗 Подключить ' + (this.savedDeviceName||'сканер'); btn.disabled = false; }
+      this.updateUI();
+    }
+  },
+
+  setupNotifications: async function() {
+    await new Promise(function(r) { setTimeout(r, 600); });
+    this.diagLog('🔗 GATT connected. Поиск сервисов...');
+    var services = [];
+    try { services = await this.server.getPrimaryServices(); this.diagLog('📋 Найдено: ' + services.length); } catch(e) { this.diagLog('⚠️ '+e.message); }
+    if (!services || services.length === 0) {
+      this.diagLog('🔄 Fallback: перебор по UUID…');
+      var found = [];
+      for (var ui = 0; ui < this.SERVICES.length; ui++) {
+        try { var svc = await this.server.getPrimaryService(this.SERVICES[ui]); if (svc) { found.push(svc); this.diagLog('  ✅ '+this.SERVICES[ui]); } } catch(e) {}
+      }
+      services = found; this.diagLog('📋 Fallback: ' + services.length);
+    }
+    if (!services || services.length === 0) { this.diagLog('❌ Сервисы не найдены. Сканер в SPP-режиме?'); return; }
+    var subscribed = 0;
+    for (var si = 0; si < services.length; si++) {
+      this.diagLog('— '+services[si].uuid);
+      var chars;
+      try { chars = await services[si].getCharacteristics(); } catch(e) { this.diagLog('  ⚠️ '+e.message); continue; }
+      for (var ci = 0; ci < chars.length; ci++) {
+        var c = chars[ci], p = c.properties;
+        var flags = (p.notify?'N':'')+(p.indicate?'I':'')+(p.read?'R':'')+(p.write?'W':'')+(p.writeWithoutResponse?'w':'');
+        this.diagLog('  • '+c.uuid.slice(0,8)+'… ['+flags+']');
+        if (p.notify || p.indicate) {
+          try {
+            await c.startNotifications();
+            c.addEventListener('characteristicvaluechanged', (function(ch) { return function(e) { ble.onData(e.target.value); }; })(c));
+            subscribed++; this.diagLog('    🔔 ok');
+          } catch(e) { this.diagLog('    ⚠️ '+e.message); }
+        }
+      }
+    }
+    this.diagLog(subscribed === 0 ? '❌ Нет подписок' : '✅ Подписок: '+subscribed+'. Сканируйте!');
+  },
+
+  onData: function(dataView) {
+    try {
+      try { var bytes=new Uint8Array(dataView.buffer); var hex=''; for(var bi=0;bi<bytes.length&&bi<16;bi++) hex+=(bytes[bi]<16?'0':'')+bytes[bi].toString(16)+' '; this.diagLog('📥 '+bytes.length+' байт: '+hex.trim()); } catch(e) {}
+      var text = new TextDecoder('utf-8').decode(dataView).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g,'').trim();
+      if (!text || text.length < 3) return;
+      var now = Date.now();
+      if (text === this.lastText && (now - this.lastTime) < this.dedupeMs) return;
+      this.lastText = text; this.lastTime = now;
+      onBLEBarcode(text);
+    } catch(e) {}
+  },
+
+  disconnect: function() {
+    this._manualDisconnect = true; this.stopAutoReconnect();
+    try { if (this.device && this.device.gatt && this.device.gatt.connected) this.device.gatt.disconnect(); } catch(e) {}
+    this.onDisconnect();
+  },
+
+  onDisconnect: function() {
+    this.connected = false; this.device = null; this.server = null; this.updateUI();
+    bleToast('⛔ BLE сканер отключён');
+    if (!this._manualDisconnect && this.savedDeviceName) this.startAutoReconnect();
+    this._manualDisconnect = false;
+  },
+
+  startAutoReconnect: function() {
+    this.stopAutoReconnect(); this._reconnectAttempts = 0;
+    bleSetStatus('🔄 Переподключение... (0/'+this._reconnectMax+')');
+    this._scheduleReconnect();
+  },
+  stopAutoReconnect: function() { if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; } },
+  _scheduleReconnect: function() {
+    var self = this;
+    this._reconnectTimer = setTimeout(async function() {
+      self._reconnectTimer = null;
+      if (self.connected || self._manualDisconnect) return;
+      self._reconnectAttempts++;
+      bleSetStatus('🔄 Переподключение... ('+self._reconnectAttempts+'/'+self._reconnectMax+')');
+      var ok = await self.reconnect();
+      if (ok) bleToast('🔗 Переподключён: '+(self.savedDeviceName||'сканер'));
+      else if (!self.connected && !self._manualDisconnect && self._reconnectAttempts < self._reconnectMax) self._scheduleReconnect();
+      else if (!self.connected) bleSetStatus('⛔ Не отвечает. Нажмите «Подключить» вручную.');
+    }, this._reconnectIntervalMs);
+  },
+
+  updateUI: function() {
+    var fab = document.getElementById('bleFab');
+    if (fab) this.connected ? fab.classList.add('ble-connected') : fab.classList.remove('ble-connected');
+    var dot = document.getElementById('bleDot');
+    if (dot) this.connected ? dot.classList.add('on') : dot.classList.remove('on');
+    bleSetStatus(this.connected ? ('Подключён' + (this.device && this.device.name ? ': '+this.device.name : '')) : 'Не подключён');
+    var devEl = document.getElementById('bleDeviceName');
+    if (devEl) {
+      if (this.connected && this.device && this.device.name) { devEl.textContent='📟 '+this.device.name; devEl.style.display=''; }
+      else if (!this.connected && this.savedDeviceName) { devEl.textContent='💾 Последний: '+this.savedDeviceName; devEl.style.display=''; }
+      else devEl.style.display='none';
+    }
+    var cb=document.getElementById('bleConnectBtn'), db=document.getElementById('bleDisconnectBtn'), fb=document.getElementById('bleForgetBtn'), ob=document.getElementById('bleOtherBtn');
+    if (cb) { cb.style.display=this.connected?'none':''; cb.textContent=(!this.connected&&this.savedDeviceName)?'🔗 Подключить '+this.savedDeviceName:'🔗 Подключить сканер'; cb.disabled=false; }
+    if (db) db.style.display=this.connected?'':'none';
+    if (fb) fb.style.display=(!this.connected&&this.savedDeviceName)?'':'none';
+    if (ob) ob.style.display=(!this.connected&&this.savedDeviceName)?'':'none';
+  },
+
+  connectManual: async function() {
+    if (!navigator.bluetooth) return;
+    var btn = document.getElementById('bleOtherBtn');
+    if (btn) { btn.textContent='⏳ Выберите...'; btn.disabled=true; }
+    try {
+      this.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: this.SERVICES });
+      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      this.server = await this.device.gatt.connect();
+      await this.setupNotifications();
+      this.connected=true; this.stopAutoReconnect(); this.saveDevice(); this.updateUI();
+      closeBlePanel(); bleToast('🔗 Подключён: '+(this.device.name||'Сканер'));
+    } catch(e) {
+      if (e.name !== 'NotFoundError') bleSetStatus('⚠️ '+(e.message||e));
+      if (btn) { btn.textContent='🔍 Выбрать другой сканер'; btn.disabled=false; }
+      this.updateUI();
+    }
+  }
+};
+
+// ════════════════════════════════════════════════════════
+// ★ ЭТУ ФУНКЦИЮ АДАПТИРУЙТЕ ПОД СВОЙ ПРОЕКТ ★
+// Вызывается при каждом отсканированном штрих-коде.
+// ════════════════════════════════════════════════════════
+function onBLEBarcode(text) {
+  bleToast('📦 ' + text);
+
+  // Показываем последний код
+  var el = document.getElementById('lastCode');
+  if (el) { el.textContent = text; el.classList.remove('empty'); }
+
+  // Добавляем в историю
+  var list = document.getElementById('historyList');
+  if (list) {
+    var empty = list.querySelector('.history-empty');
+    if (empty) empty.remove();
+    var li = document.createElement('li');
+    var ts = new Date().toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    li.textContent = ts + '  ' + text;
+    list.insertBefore(li, list.firstChild);
+    if (list.children.length > 20) list.removeChild(list.lastChild);
+  }
+}
+
+// ── Утилиты ──
+function bleRenderDiag() { var el=document.getElementById('bleDiagLog'); if(!el)return; el.textContent=(ble.diag||[]).join('\n'); el.scrollTop=el.scrollHeight; }
+function bleToggleDiag() { var box=document.getElementById('bleDiagBox'),btn=document.getElementById('bleDiagToggleBtn'); if(!box)return; var open=box.style.display!=='none'; box.style.display=open?'none':''; if(btn)btn.textContent=open?'🔬 Показать лог диагностики':'🔬 Скрыть лог диагностики'; if(!open)bleRenderDiag(); }
+function bleCopyDiag() { var text=(ble.diag||[]).join('\n'); if(!text){bleToast('Лог пуст');return;} try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){bleToast('📋 Скопирован')});else{var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);bleToast('📋 Скопирован');}}catch(e){bleToast('⚠️ Не удалось');} }
+function openBlePanel() { ble.updateUI(); document.getElementById('blePanelOverlay').classList.add('active'); }
+function closeBlePanel() { document.getElementById('blePanelOverlay').classList.remove('active'); }
+function bleConnect() { ble.connect(); }
+function bleDisconnect() { ble.disconnect(); }
+function bleSetStatus(html) { var el=document.getElementById('bleStatusText'); if(el)el.innerHTML=html; }
+var _bleToastTimer=null;
+function bleToast(msg) { var el=document.getElementById('bleToast'); if(!el)return; el.textContent=msg; el.classList.add('show'); if(_bleToastTimer)clearTimeout(_bleToastTimer); _bleToastTimer=setTimeout(function(){el.classList.remove('show');},2500); }
+
+// ── Инициализация ──
+window.addEventListener('DOMContentLoaded', function() {
+  ble.loadSavedDevice();
+  ble.updateUI();
+  if (ble.savedDeviceName) {
+    ble.reconnect().then(function(ok) {
+      if (ok) bleToast('🔗 Автоподключение: ' + ble.savedDeviceName);
+    });
+  }
+});
+</script>
+</body>
+</html>
