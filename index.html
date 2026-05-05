@@ -1224,6 +1224,7 @@ function syncSettingsUI() {
   document.getElementById('setRefreshAfterSave').checked = settings.refreshAfterSave !== false;
   document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
   document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
+  document.getElementById('setPrefetchPhotos').checked = !!settings.prefetchPhotos;
   document.getElementById('setAutoReconnect').checked = settings.autoReconnect !== false;
   document.getElementById('setLandscapeSplit').checked = settings.landscapeSplit !== false;
   document.getElementById('setPhotoOnLeft').checked = !!settings.photoOnLeft;
@@ -1286,6 +1287,7 @@ function readSettingsFromUI() {
     autoReconnect: document.getElementById('setAutoReconnect').checked,
     landscapeSplit: document.getElementById('setLandscapeSplit').checked,
     photoOnLeft: document.getElementById('setPhotoOnLeft').checked,
+    prefetchPhotos: document.getElementById('setPrefetchPhotos').checked,
   };
 }
 
@@ -1345,6 +1347,61 @@ function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
   applySettings();
   document.getElementById('settingsOverlay').classList.remove('active');
+}
+
+// ── Предзагрузка фото в дисковый кэш браузера ──
+// Использует fetch() — изображения сохраняются на диск, не в RAM.
+// JS-ссылки не удерживаются, так что памяти почти не тратится.
+var _prefetchRunning = false;
+
+function prefetchAllPhotos() {
+  if (_prefetchRunning) { stopPrefetch(); return; }
+
+  var urls = [];
+  var seen = {};
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (item.photoUrl && !seen[item.photoUrl]) {
+      seen[item.photoUrl] = true;
+      urls.push(item.photoUrl);
+    }
+  });
+
+  var total = urls.length;
+  var btn = document.getElementById('prefetchBtn');
+  var prog = document.getElementById('prefetchProgress');
+  if (!total) {
+    if (prog) prog.textContent = 'Нет фото для загрузки.';
+    return;
+  }
+
+  _prefetchRunning = true;
+  if (btn) btn.textContent = '⏹ Остановить';
+  if (prog) prog.textContent = '⏳ 0 / ' + total;
+
+  var i = 0;
+  function next() {
+    if (!_prefetchRunning || i >= urls.length) {
+      _prefetchRunning = false;
+      if (btn) btn.textContent = '🖼️ Загрузить все фото в кэш';
+      if (prog) prog.textContent = i >= urls.length ? ('✅ Готово: ' + i + ' фото') : ('⏹ Остановлено на ' + i + ' / ' + total);
+      return;
+    }
+    fetch(urls[i], { cache: 'default' }).catch(function() {}).finally(function() {
+      i++;
+      if (prog) prog.textContent = '⏳ ' + i + ' / ' + total;
+      // Пауза каждые 5 фото — даём устройству передышку
+      if (i % 5 === 0) {
+        setTimeout(next, 120);
+      } else {
+        setTimeout(next, 0);
+      }
+    });
+  }
+  next();
+}
+
+function stopPrefetch() {
+  _prefetchRunning = false;
 }
 
 function settingsOverlayBgClick(e) {
@@ -1801,6 +1858,8 @@ function openTableView() {
     document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
     buildTypeTabs();
     renderTableView();
+    // Если настройка включена — запускаем тихую предзагрузку фото в фоне
+    if (settings.prefetchPhotos && !_prefetchRunning) prefetchAllPhotos();
   }, 50);
 }
 
@@ -3421,6 +3480,22 @@ window.onload = function() {
       <div style="font-size:11px;color:#9ca3af;margin-top:4px">
         Поменять местами: фото слева, информация и кнопки справа.
       </div>
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🖼️ Кэш фотографий</div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setPrefetchPhotos">
+        Кэшировать фото при открытии «Все изделия»
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
+        При каждом открытии таблицы все фото тихо загружаются в дисковый кэш браузера. Это <b>не</b> занимает оперативную память — фото хранятся на диске и открываются мгновенно без сети.<br>
+        Для слабых устройств (2 ГБ RAM) лучше оставить <b>выключено</b> и использовать кнопку ниже вручную.
+      </div>
+      <button id="prefetchBtn" class="btn btn-secondary" style="font-size:13px" onclick="prefetchAllPhotos()">
+        🖼️ Загрузить все фото в кэш
+      </button>
+      <div id="prefetchProgress" style="font-size:12px;color:#6b7280;margin-top:6px"></div>
     </div>
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
