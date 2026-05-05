@@ -1353,6 +1353,8 @@ function saveSettings() {
 // Использует fetch() — изображения сохраняются на диск, не в RAM.
 // JS-ссылки не удерживаются, так что памяти почти не тратится.
 var _prefetchRunning = false;
+var _prefetchImgRefs = []; // удерживаем Image-объекты пока они грузятся, потом отпускаем
+var _prefetchAutoTimer = null; // таймер отложенного авто-старта
 
 function prefetchAllPhotos() {
   if (_prefetchRunning) { stopPrefetch(); return; }
@@ -1375,33 +1377,46 @@ function prefetchAllPhotos() {
   }
 
   _prefetchRunning = true;
+  _prefetchImgRefs = [];
   if (btn) btn.textContent = '⏹ Остановить';
   if (prog) prog.textContent = '⏳ 0 / ' + total;
 
+  var done = 0;
   var i = 0;
+
   function next() {
     if (!_prefetchRunning || i >= urls.length) {
       _prefetchRunning = false;
+      _prefetchImgRefs = [];
       if (btn) btn.textContent = '🖼️ Загрузить все фото в кэш';
-      if (prog) prog.textContent = i >= urls.length ? ('✅ Готово: ' + i + ' фото') : ('⏹ Остановлено на ' + i + ' / ' + total);
+      if (prog) prog.textContent = (i >= urls.length)
+        ? ('✅ Готово: ' + done + ' фото')
+        : ('⏹ Остановлено на ' + done + ' / ' + total);
       return;
     }
-    fetch(urls[i], { cache: 'default' }).catch(function() {}).finally(function() {
-      i++;
-      if (prog) prog.textContent = '⏳ ' + i + ' / ' + total;
-      // Пауза каждые 5 фото — даём устройству передышку
-      if (i % 5 === 0) {
-        setTimeout(next, 120);
-      } else {
-        setTimeout(next, 0);
-      }
-    });
+
+    // new Image() вместо fetch() — нет CORS-ограничений, кэшируется так же как <img src>
+    var img = new Image();
+    _prefetchImgRefs.push(img);
+    img.onload = img.onerror = function() {
+      done++;
+      var idx = _prefetchImgRefs.indexOf(this);
+      if (idx !== -1) _prefetchImgRefs.splice(idx, 1); // отпускаем ссылку после загрузки
+      if (prog) prog.textContent = '⏳ ' + done + ' / ' + total;
+      // 50мс между фото, 400мс пауза каждые 5 — чтобы не забивать сеть и CPU
+      setTimeout(next, done % 5 === 0 ? 400 : 50);
+    };
+    img.src = urls[i];
+    i++;
   }
+
   next();
 }
 
 function stopPrefetch() {
   _prefetchRunning = false;
+  _prefetchImgRefs = [];
+  if (_prefetchAutoTimer) { clearTimeout(_prefetchAutoTimer); _prefetchAutoTimer = null; }
 }
 
 function settingsOverlayBgClick(e) {
@@ -1858,8 +1873,14 @@ function openTableView() {
     document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
     buildTypeTabs();
     renderTableView();
-    // Если настройка включена — запускаем тихую предзагрузку фото в фоне
-    if (settings.prefetchPhotos && !_prefetchRunning) prefetchAllPhotos();
+    // Если настройка включена — запускаем предзагрузку с задержкой 4 сек,
+    // чтобы не конкурировать с загрузкой видимых фото.
+    if (settings.prefetchPhotos && !_prefetchRunning) {
+      _prefetchAutoTimer = setTimeout(function() {
+        _prefetchAutoTimer = null;
+        if (settings.prefetchPhotos && !_prefetchRunning) prefetchAllPhotos();
+      }, 4000);
+    }
   }, 50);
 }
 
@@ -1868,6 +1889,7 @@ function closeTableView() {
     if (!confirm('Есть несохранённые изменения. Закрыть без сохранения?')) return;
     tableChangedModels.clear();
   }
+  stopPrefetch(); // прерываем фоновую загрузку — пользователь вышел из таблицы
   document.getElementById('tableView').classList.remove('active');
 }
 
