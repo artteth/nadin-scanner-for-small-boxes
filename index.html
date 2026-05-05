@@ -2705,6 +2705,8 @@ var ble = {
   _reconnectAttempts: 0,
   _reconnectMax: 12,
   _reconnectIntervalMs: 5000,
+  _disconnectHandler: null,      // единственный экземпляр gattserverdisconnected-обработчика
+  _characteristicListeners: [],  // [{char, handler}] — для снятия подписок при отключении
 
   // UUIDs сервисов — охватывают большинство BLE-сканеров.
   // ВАЖНО: Android Chrome строго фильтрует getPrimaryServices() по этому списку.
@@ -2766,7 +2768,7 @@ var ble = {
     var t = new Date().toTimeString().slice(0,8);
     this.diag.push('[' + t + '] ' + msg);
     if (this.diag.length > 50) this.diag.shift();
-    bleRenderDiag();
+    bleRenderDiag(); // рисует только если панель видима (см. bleRenderDiag)
   },
   diagClear: function() { this.diag = []; bleRenderDiag(); },
 
@@ -2803,7 +2805,7 @@ var ble = {
       if (!found) return false;
 
       this.device = found;
-      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      this._attachDisconnectListener(this.device);
 
       // Вариант 1: прямое подключение (работает если устройство в зоне и не спит)
       try {
@@ -2881,7 +2883,7 @@ var ble = {
       this.device = await navigator.bluetooth.requestDevice(params);
 
       if (btn) { btn.textContent = '⏳ Подключение...'; }
-      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      this._attachDisconnectListener(this.device);
       this.server = await this.device.gatt.connect();
       await this.setupNotifications();
       this.connected = true;
@@ -2906,6 +2908,9 @@ var ble = {
     // Android Chrome требует паузу между gatt.connect() и getPrimaryServices(),
     // иначе часто возвращает пустой список сервисов.
     await new Promise(function(r) { setTimeout(r, 600); });
+
+    // Сбрасываем старые ссылки на характеристики (новое подключение — новые объекты)
+    this._characteristicListeners = [];
 
     this.diagLog('🔗 GATT connected. Поиск сервисов...');
 
@@ -2957,9 +2962,11 @@ var ble = {
         if (p.notify || p.indicate) {
           try {
             await c.startNotifications();
-            c.addEventListener('characteristicvaluechanged', (function(ch) {
+            var _handler = (function(ch) {
               return function(e) { ble.onData(e.target.value); };
-            })(c));
+            })(c);
+            c.addEventListener('characteristicvaluechanged', _handler);
+            this._characteristicListeners.push({ char: c, handler: _handler });
             subscribed++;
             this.diagLog('    🔔 подписка ok');
           } catch(e) {
@@ -3018,6 +3025,11 @@ var ble = {
   },
 
   onDisconnect: function() {
+    // Снимаем все characteristicvaluechanged-подписки перед потерей ссылок
+    (this._characteristicListeners || []).forEach(function(obj) {
+      try { obj.char.removeEventListener('characteristicvaluechanged', obj.handler); } catch(e) {}
+    });
+    this._characteristicListeners = [];
     this.connected = false;
     this.device = null;
     this.server = null;
@@ -3115,6 +3127,16 @@ var ble = {
     if (ob) { ob.style.display = (!this.connected && this.savedDeviceName) ? '' : 'none'; }
   },
 
+  // Безопасная привязка gattserverdisconnected: удаляем старый перед добавлением нового.
+  // Вызывать сразу после присвоения this.device.
+  _attachDisconnectListener: function(dev) {
+    if (this._disconnectHandler) {
+      try { dev.removeEventListener('gattserverdisconnected', this._disconnectHandler); } catch(e) {}
+    }
+    this._disconnectHandler = function() { ble.onDisconnect(); };
+    dev.addEventListener('gattserverdisconnected', this._disconnectHandler);
+  },
+
   // Подключиться вручную (всегда показывает диалог выбора, игнорирует сохранённое)
   connectManual: async function() {
     if (!navigator.bluetooth) return;
@@ -3126,7 +3148,7 @@ var ble = {
         acceptAllDevices: true,
         optionalServices: this.SERVICES
       });
-      this.device.addEventListener('gattserverdisconnected', function() { ble.onDisconnect(); });
+      this._attachDisconnectListener(this.device);
       this.server = await this.device.gatt.connect();
       await this.setupNotifications();
       this.connected = true;
@@ -3172,6 +3194,9 @@ function onBLEBarcode(text) {
 
 // ── BLE диагностика (показывает лог сервисов/характеристик) ──
 function bleRenderDiag() {
+  // Не трогаем DOM если панель диагностики скрыта — иначе каждый пакет вызывает reflow
+  var box = document.getElementById('bleDiagBox');
+  if (!box || box.style.display === 'none') return;
   var el = document.getElementById('bleDiagLog');
   if (!el) return;
   if (!ble.diag || !ble.diag.length) { el.textContent = ''; return; }
