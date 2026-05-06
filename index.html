@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v145</title>
+  <title>Сканер упаковки v146</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1026,7 +1026,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v145</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v146</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1517,6 +1517,7 @@ function preloadAllData() {
         showError('Ошибка загрузки: ' + result.error);
       } else {
         barcodeToModel = result.barcodes || {};
+        _tableDataVersion++;
         // Используем список типов упаковки с сервера (лист "ФОРМУЛЫ/выпадающие списки", столбец AD)
         if (result.packTypes && result.packTypes.length > 0) {
           serverPackTypes = result.packTypes;
@@ -1554,6 +1555,7 @@ function refreshData() {
     if (btn) btn.classList.remove('spinning');
     if (result && !result.error) {
       barcodeToModel = result.barcodes || {};
+      _tableDataVersion++;
       if (result.packTypes && result.packTypes.length > 0) {
         serverPackTypes = result.packTypes;
         buildDynamicPackTypes();
@@ -1872,7 +1874,11 @@ function openTableView() {
     var h = document.querySelector('.tbl-topbar').offsetHeight;
     document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
     buildTypeTabs();
-    renderTableView();
+    if (_tableRenderedVersion !== _tableDataVersion) {
+      renderTableView(); // полный рендер — данные обновились
+    } else {
+      applyTableFilter(); // данные те же — просто применить фильтр
+    }
     // Если настройка включена — запускаем предзагрузку с задержкой 4 сек,
     // чтобы не конкурировать с загрузкой видимых фото.
     if (settings.prefetchPhotos && !_prefetchRunning) {
@@ -1915,7 +1921,7 @@ function buildTypeTabs() {
       tableActiveType = this.dataset.type;
       wrap.querySelectorAll('.tbl-tab').forEach(function(b) { b.classList.remove('active'); });
       this.classList.add('active');
-      renderTableView();
+      applyTableFilter();
     });
   });
 }
@@ -1958,18 +1964,40 @@ function getTableModels() {
 // 2) Замена <select> на ячейку-кликушку + общий picker — экономит тысячи DOM-узлов
 // 3) Lazy-изображения через IntersectionObserver — фото подгружаются по мере прокрутки
 // 4) Debounce поиска (200мс) — не ререндерит таблицу на каждое нажатие клавиши
-var _renderToken = 0;       // счётчик; при новом рендере отменяет предыдущий
+var _renderToken = 0;
 var _lazyImageObserver = null;
 var _searchDebounceTimer = null;
 var _packPickerModel = null;
+var _tableDataVersion = 0;      // растёт при каждом обновлении barcodeToModel
+var _tableRenderedVersion = -1; // версия последнего полного рендера tbody
 
+// Все модели без фильтра по типу/поиску — для полного рендера tbody
+function getAllTableModels() {
+  var seen = {};
+  var models = [];
+  Object.values(barcodeToModel).forEach(function(item) {
+    if (seen[item.model]) return;
+    seen[item.model] = true;
+    models.push(item);
+  });
+  models.sort(function(a, b) {
+    if (a.repacked !== b.repacked) return a.repacked ? -1 : 1;
+    var pa = parseModelNum(a.model), pb = parseModelNum(b.model);
+    if (pa.type !== pb.type) return pa.type - pb.type;
+    if (pa.model !== pb.model) return pa.model - pb.model;
+    return pa.design - pb.design;
+  });
+  return models;
+}
+
+// Полный рендер tbody — все строки сразу, без фильтра по табу/поиску.
+// Вызывается только когда данные изменились (_tableDataVersion изменился).
 function renderTableView() {
   var token = ++_renderToken;
-  var models = getTableModels();
+  var models = getAllTableModels();
   var tbody = document.getElementById('tblBody');
   var empty = document.getElementById('tblEmpty');
 
-  // Останавливаем старый observer
   if (_lazyImageObserver) {
     try { _lazyImageObserver.disconnect(); } catch(e) {}
     _lazyImageObserver = null;
@@ -1987,7 +2015,7 @@ function renderTableView() {
   var i = 0;
 
   function renderChunk() {
-    if (token !== _renderToken) return; // запрос отменён новым рендером
+    if (token !== _renderToken) return;
     var end = Math.min(i + CHUNK_SIZE, models.length);
     var html = '';
     for (var j = i; j < end; j++) html += _rowHtml(models[j]);
@@ -1996,10 +2024,28 @@ function renderTableView() {
     if (i < models.length) {
       requestAnimationFrame(renderChunk);
     } else {
+      _tableRenderedVersion = _tableDataVersion;
       _initLazyImages();
+      applyTableFilter();
     }
   }
   renderChunk();
+}
+
+// Показывает/скрывает строки по активному табу и строке поиска — без пересоздания DOM.
+// Вызывается при переключении таба, вводе поиска, и при открытии таблицы без изменения данных.
+function applyTableFilter() {
+  var search = (document.getElementById('tblSearch').value || '').toLowerCase().trim();
+  var rows = document.getElementById('tblBody').querySelectorAll('tr');
+  var visible = 0;
+  rows.forEach(function(row) {
+    var show = true;
+    if (tableActiveType && (row.dataset.type || '') !== tableActiveType) show = false;
+    if (show && search && (row.dataset.model || '').toLowerCase().indexOf(search) === -1) show = false;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('tblEmpty').style.display = visible ? 'none' : '';
 }
 
 function _rowHtml(item) {
@@ -2013,7 +2059,7 @@ function _rowHtml(item) {
     ? esc(item.packType)
     : '<span class="tbl-pack-empty">—</span>';
   var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
-  return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
+  return '<tr class="' + cls + '" data-model="' + esc(item.model) + '" data-type="' + esc(item.type || '') + '">'
     + '<td class="tbl-model">' + esc(item.model) + '</td>'
     + '<td class="tbl-col-photo">' + photoHtml + '</td>'
     + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
@@ -2055,7 +2101,7 @@ function _swapLazyToImg(el) {
 // Debounce поиска — не дёргаем рендер на каждое нажатие
 function tblSearchInput() {
   clearTimeout(_searchDebounceTimer);
-  _searchDebounceTimer = setTimeout(renderTableView, 200);
+  _searchDebounceTimer = setTimeout(applyTableFilter, 200);
 }
 
 // ── Picker для типа упаковки (вместо <select> в каждой строке) ──
