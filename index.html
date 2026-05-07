@@ -2013,10 +2013,20 @@ function _rowHtml(item) {
     ? esc(item.packType)
     : '<span class="tbl-pack-empty">—</span>';
   var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
+
+  // Показываем дату рядом с галочкой для новых записей (YYYY-MM-DD формат)
+  var isDateFormat = item.repacked && typeof item.repacked === 'string' && /^\d{4}-\d{2}-\d{2}/.test(item.repacked.trim());
+  var checkboxCell = '';
+  if (isDateFormat) {
+    checkboxCell = '<div style="display:flex;gap:6px;align-items:center"><span class="mono" style="font-size:11px">' + esc(item.repacked.trim()) + '</span><input type="checkbox" checked style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0"></div>';
+  } else {
+    checkboxCell = '<input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto">';
+  }
+
   return '<tr class="' + cls + '" data-model="' + esc(item.model) + '">'
     + '<td class="tbl-model">' + esc(item.model) + '</td>'
     + '<td class="tbl-col-photo">' + photoHtml + '</td>'
-    + '<td class="tbl-center"><input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto"></td>'
+    + '<td class="tbl-center">' + checkboxCell + '</td>'
     + '<td><div class="tbl-pack-cell" data-current-value="' + esc(item.packType || '') + '">' + packDisplay + '</div></td>'
     + '<td class="tbl-save-cell">' + saveBtn + '</td>'
     + '</tr>';
@@ -2128,7 +2138,16 @@ function initTableEvents() {
 
 function tblSetRepacked(model, checked, tr) {
   Object.keys(barcodeToModel).forEach(function(bc) {
-    if (barcodeToModel[bc].model === model) barcodeToModel[bc].repacked = checked;
+    if (barcodeToModel[bc].model === model) {
+      if (checked) {
+        // Получаем сегодняшнюю дату в формате YYYY-MM-DD
+        var now = new Date();
+        var pad = function(n) { return n < 10 ? '0' + n : n; };
+        barcodeToModel[bc].repacked = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+      } else {
+        barcodeToModel[bc].repacked = false;
+      }
+    }
   });
   tableChangedModels.add(model);
   tblRefreshRow(tr, model);
