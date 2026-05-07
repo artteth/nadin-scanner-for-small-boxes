@@ -135,6 +135,42 @@ function formatTimestamp(ts) {
 - **v147**: Промежуточная версия (базовая реализация)
 - **v146 и ниже**: TRUE/FALSE формат
 
+## Известные ошибки и их исправление
+
+### Ошибка: Даты не показываются в таблице (v148)
+
+**Проблема:** В функции `_rowHtml()` была ошибка — проверялось поле `item.repacked` (boolean) вместо `item.timestamp` (строка с датой).
+
+```javascript
+// ❌ НЕПРАВИЛЬНО (v148)
+var isDateFormat = item.repacked && typeof item.repacked === 'string' && ...
+```
+
+**Решение (v149):** Изменить на:
+
+```javascript
+// ✅ ПРАВИЛЬНО (v149+)
+var isDateFormat = item.timestamp && typeof item.timestamp === 'string' && ...
+```
+
+Структура данных:
+- `item.repacked` — boolean (true/false) — статус упаковки
+- `item.timestamp` — string (например "2026-05-07") — дата упаковки
+
+### Ошибка: Дата приходит как Date-объект
+
+**Проблема:** Google Sheets возвращает Date-объекты, а не строки при чтении дат.
+
+**Решение:** В `server-code.js` функции `getAllBarcodes()` и `lookupBarcode()` добавлена проверка:
+
+```javascript
+if (repackedValue instanceof Date) {
+  // Форматируем Date в YYYY-MM-DD
+  const pad = (n) => n < 10 ? '0' + n : n;
+  timestamp = repackedValue.getFullYear() + '-' + pad(repackedValue.getMonth() + 1) + '-' + pad(repackedValue.getDate());
+}
+```
+
 ## Тестирование
 
 1. Откройте "Все изделия"
@@ -142,3 +178,4 @@ function formatTimestamp(ts) {
 3. Проверьте Google Sheets — должна появиться дата `YYYY-MM-DD`
 4. Снимите галочку — дата должна удалиться
 5. Старые записи (TRUE) должны отображаться как галочка
+6. Новые записи с датой должны показывать дату + галочка
