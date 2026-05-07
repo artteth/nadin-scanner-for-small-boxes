@@ -157,17 +157,30 @@ function lookupBarcode(barcode) {
       const repackedValue = wbData[i][42]; // колонка AQ (теперь дата вместо boolean)
       const packType = wbData[i][44]; // колонка AS
       let timestamp = '';
+      let isPacked = false;
 
       if (repackedValue) {
+        // Проверяем, это Date-объект (новый формат с датой)
         if (repackedValue instanceof Date) {
           const pad = (n) => n < 10 ? '0' + n : n;
           timestamp = repackedValue.getFullYear() + '-' + pad(repackedValue.getMonth() + 1) + '-' + pad(repackedValue.getDate());
-        } else {
-          timestamp = repackedValue.toString().trim();
+          isPacked = true;
+        }
+        // Проверяем, это строка в формате YYYY-MM-DD
+        else if (typeof repackedValue === 'string') {
+          const str = repackedValue.trim();
+          if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+            timestamp = str;
+            isPacked = true;
+          }
+        }
+        // Старый формат - boolean или число (TRUE, 1, и т.д.)
+        else if (repackedValue === true || repackedValue === 1 || repackedValue === 'TRUE' || repackedValue === 'true') {
+          isPacked = true;
+          timestamp = ''; // для старых данных не выводим дату
         }
       }
 
-      const isPacked = timestamp.length > 0;
       return {
         found: true,
         model: model.toString(),
@@ -368,19 +381,30 @@ function getAllBarcodes() {
         const repackedValue = row[42]; // AQ - теперь дата вместо boolean
         const packType = row[44]; // AS
         let timestamp = '';
+        let isPacked = false;
 
         if (repackedValue) {
+          // Проверяем, это Date-объект (новый формат с датой)
           if (repackedValue instanceof Date) {
-            // Если это Date-объект, форматируем его
             const pad = (n) => n < 10 ? '0' + n : n;
             timestamp = repackedValue.getFullYear() + '-' + pad(repackedValue.getMonth() + 1) + '-' + pad(repackedValue.getDate());
-          } else {
-            // Если это строка, используем как есть
-            timestamp = repackedValue.toString().trim();
+            isPacked = true;
+          }
+          // Проверяем, это строка в формате YYYY-MM-DD
+          else if (typeof repackedValue === 'string') {
+            const str = repackedValue.trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+              timestamp = str;
+              isPacked = true;
+            }
+          }
+          // Старый формат - boolean или число (TRUE, 1, и т.д.)
+          else if (repackedValue === true || repackedValue === 1 || repackedValue === 'TRUE' || repackedValue === 'true') {
+            isPacked = true;
+            timestamp = ''; // для старых данных не выводим дату
           }
         }
 
-        const isPacked = timestamp.length > 0;
         modelStatus[model.toString().trim()] = {
           repacked: isPacked,
           timestamp: timestamp,
