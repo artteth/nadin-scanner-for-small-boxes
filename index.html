@@ -2015,10 +2015,10 @@ function _rowHtml(item) {
   var saveBtn = isChanged ? '<button class="tbl-save-btn">Записать</button>' : '';
 
   // Показываем дату рядом с галочкой для новых записей (YYYY-MM-DD формат)
-  var isDateFormat = item.repacked && typeof item.repacked === 'string' && /^\d{4}-\d{2}-\d{2}/.test(item.repacked.trim());
+  var isDateFormat = item.timestamp && typeof item.timestamp === 'string' && /^\d{4}-\d{2}-\d{2}/.test(item.timestamp.trim());
   var checkboxCell = '';
   if (isDateFormat) {
-    checkboxCell = '<div style="display:flex;gap:6px;align-items:center"><span class="mono" style="font-size:11px">' + esc(item.repacked.trim()) + '</span><input type="checkbox" checked style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0"></div>';
+    checkboxCell = '<div style="display:flex;gap:6px;align-items:center"><span class="mono" style="font-size:11px">' + esc(item.timestamp.trim()) + '</span><input type="checkbox" checked style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0"></div>';
   } else {
     checkboxCell = '<input type="checkbox"' + (item.repacked ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#15803d;cursor:pointer;display:block;margin:0 auto">';
   }
