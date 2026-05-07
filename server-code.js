@@ -5,6 +5,14 @@ const SPEC_DATA_START_ROW = 5;
 const PHOTO_SPREADSHEET_ID = "12902ms2HZg8PowDYsRz9sDlRjMYTPxRZ936swd9mrG8";
 const PHOTO_SHEET_NAME = "WB_Cards";
 
+function formatDate(date) {
+  const pad = (n) => n < 10 ? '0' + n : n;
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  return year + '-' + month + '-' + day;
+}
+
 function getSpreadsheet() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
@@ -146,13 +154,15 @@ function lookupBarcode(barcode) {
   for (let i = 0; i < wbData.length; i++) {
     const rowModel = wbData[i][3]; // колонка D
     if (rowModel && rowModel.toString().trim() === model.toString().trim()) {
-      const repacked = wbData[i][42]; // колонка AQ
+      const repackedValue = wbData[i][42]; // колонка AQ (теперь дата вместо boolean)
       const packType = wbData[i][44]; // колонка AS
-      const isPacked = repacked === true || repacked === 1 || repacked === 'TRUE' || repacked === 'true';
+      const timestamp = repackedValue ? repackedValue.toString().trim() : '';
+      const isPacked = timestamp.length > 0;
       return {
         found: true,
         model: model.toString(),
         repacked: isPacked,
+        timestamp: timestamp,
         packType: packType ? packType.toString() : ''
       };
     }
@@ -177,7 +187,9 @@ function savePackaging(model, packType) {
     const rowModel = data[i][0];
     if (rowModel && rowModel.toString().trim() === model.toString().trim()) {
       const rowNum = 6 + i;
-      sheet.getRange(rowNum, 43).setValue(true);   // AQ — упаковано
+      const now = new Date();
+      const timestamp = formatDate(now);
+      sheet.getRange(rowNum, 43).setValue(timestamp);   // AQ — дата/время упаковки
       sheet.getRange(rowNum, 45).setValue(packType); // AS — тип упаковки
       return { success: true };
     }
@@ -189,6 +201,7 @@ function savePackaging(model, packType) {
 /**
  * Сохраняет и статус упаковки (repacked), и тип упаковки.
  * В отличие от savePackaging, позволяет снять отметку (repacked=false).
+ * Вместо TRUE/FALSE теперь сохраняет дату в формате "YYYY-MM-DD".
  */
 function saveItem(model, repacked, packType) {
   if (!model) return { success: false, error: 'Модель не указана' };
@@ -206,7 +219,13 @@ function saveItem(model, repacked, packType) {
     const rowModel = data[i][0];
     if (rowModel && rowModel.toString().trim() === model.toString().trim()) {
       const rowNum = 6 + i;
-      sheet.getRange(rowNum, 43).setValue(repacked === true); // AQ
+      if (repacked === true) {
+        const now = new Date();
+        const timestamp = formatDate(now);
+        sheet.getRange(rowNum, 43).setValue(timestamp); // AQ - дата/время упаковки
+      } else {
+        sheet.getRange(rowNum, 43).setValue(''); // AQ - очистить при отметке снята
+      }
       sheet.getRange(rowNum, 45).setValue(packType || '');    // AS
       return { success: true };
     }
@@ -266,6 +285,8 @@ function saveData(updates) {
 
   const saved = [];
   const errors = [];
+  const now = new Date();
+  const timestamp = formatDate(now);
 
   updates.forEach(u => {
     const currentRow = currentData.find(r => r.model === u.model);
@@ -275,7 +296,11 @@ function saveData(updates) {
       return;
     }
 
-    sheet.getRange(currentRow.rowNum, 43).setValue(u.repacked ? true : false);
+    if (u.repacked) {
+      sheet.getRange(currentRow.rowNum, 43).setValue(timestamp);
+    } else {
+      sheet.getRange(currentRow.rowNum, 43).setValue('');
+    }
     if (u.packType !== undefined) {
       sheet.getRange(currentRow.rowNum, 45).setValue(u.packType);
     }
@@ -330,25 +355,28 @@ function getAllBarcodes() {
     wbData.forEach(row => {
       const model = row[3]; // D
       if (model) {
-        const repacked = row[42]; // AQ
+        const repackedValue = row[42]; // AQ - теперь дата вместо boolean
         const packType = row[44]; // AS
-        const isPacked = repacked === true || repacked === 1 || repacked === 'TRUE' || repacked === 'true';
+        const timestamp = repackedValue ? repackedValue.toString().trim() : '';
+        const isPacked = timestamp.length > 0;
         modelStatus[model.toString().trim()] = {
           repacked: isPacked,
+          timestamp: timestamp,
           packType: packType ? packType.toString() : '',
           type: (row[2] || '').toString()  // C = тип изделия
         };
       }
     });
 
-    // 4. Сборка: barcode → { model, repacked, packType, type, photoUrl }
+    // 4. Сборка: barcode → { model, repacked, timestamp, packType, type, photoUrl }
     const result = {};
     Object.keys(barcodeToModel).forEach(barcode => {
       const model = barcodeToModel[barcode];
-      const status = modelStatus[model] || { repacked: false, packType: '', type: '' };
+      const status = modelStatus[model] || { repacked: false, timestamp: '', packType: '', type: '' };
       result[barcode] = {
         model: model,
         repacked: status.repacked,
+        timestamp: status.timestamp,
         packType: status.packType,
         type: status.type,
         photoUrl: photoMapping[model] || null
