@@ -10,10 +10,7 @@ function formatDate(date) {
   const year = date.getFullYear();
   const month = pad(date.getMonth() + 1);
   const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
-  return year + '-' + month + '-' + day + ' ' + hours + ':' + minutes + ':' + seconds;
+  return year + '-' + month + '-' + day;
 }
 
 function getSpreadsheet() {
@@ -204,7 +201,7 @@ function savePackaging(model, packType) {
 /**
  * Сохраняет и статус упаковки (repacked), и тип упаковки.
  * В отличие от savePackaging, позволяет снять отметку (repacked=false).
- * Вместо TRUE/FALSE теперь сохраняет дату в формате "YYYY-MM-DD HH:MM:SS".
+ * Вместо TRUE/FALSE теперь сохраняет дату в формате "YYYY-MM-DD".
  */
 function saveItem(model, repacked, packType) {
   if (!model) return { success: false, error: 'Модель не указана' };
