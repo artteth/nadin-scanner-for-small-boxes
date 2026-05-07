@@ -156,7 +156,17 @@ function lookupBarcode(barcode) {
     if (rowModel && rowModel.toString().trim() === model.toString().trim()) {
       const repackedValue = wbData[i][42]; // колонка AQ (теперь дата вместо boolean)
       const packType = wbData[i][44]; // колонка AS
-      const timestamp = repackedValue ? repackedValue.toString().trim() : '';
+      let timestamp = '';
+
+      if (repackedValue) {
+        if (repackedValue instanceof Date) {
+          const pad = (n) => n < 10 ? '0' + n : n;
+          timestamp = repackedValue.getFullYear() + '-' + pad(repackedValue.getMonth() + 1) + '-' + pad(repackedValue.getDate());
+        } else {
+          timestamp = repackedValue.toString().trim();
+        }
+      }
+
       const isPacked = timestamp.length > 0;
       return {
         found: true,
@@ -357,7 +367,19 @@ function getAllBarcodes() {
       if (model) {
         const repackedValue = row[42]; // AQ - теперь дата вместо boolean
         const packType = row[44]; // AS
-        const timestamp = repackedValue ? repackedValue.toString().trim() : '';
+        let timestamp = '';
+
+        if (repackedValue) {
+          if (repackedValue instanceof Date) {
+            // Если это Date-объект, форматируем его
+            const pad = (n) => n < 10 ? '0' + n : n;
+            timestamp = repackedValue.getFullYear() + '-' + pad(repackedValue.getMonth() + 1) + '-' + pad(repackedValue.getDate());
+          } else {
+            // Если это строка, используем как есть
+            timestamp = repackedValue.toString().trim();
+          }
+        }
+
         const isPacked = timestamp.length > 0;
         modelStatus[model.toString().trim()] = {
           repacked: isPacked,
