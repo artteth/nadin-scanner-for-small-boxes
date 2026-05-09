@@ -1818,7 +1818,8 @@ function onSave() {
       addToHistory(savedModel, packType, 'success');
       showState('stateSuccess');
       setTimeout(goIdle, 1200);
-      if (settings.refreshAfterSave) setTimeout(refreshData, 1500);
+      // Не обновляем данные автоматически после сохранения — это может создавать дубли в истории
+      // if (settings.refreshAfterSave) setTimeout(refreshData, 1500);
     });
 }
 
