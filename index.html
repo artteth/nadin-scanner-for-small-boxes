@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v149</title>
+  <title>Сканер упаковки v150</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1026,7 +1026,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v149</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v150</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1417,6 +1417,31 @@ function stopPrefetch() {
   _prefetchRunning = false;
   _prefetchImgRefs = [];
   if (_prefetchAutoTimer) { clearTimeout(_prefetchAutoTimer); _prefetchAutoTimer = null; }
+}
+
+// Очистка кэша фото в CacheStorage (его держит Service Worker, sw.js).
+// Полезно если фото обновили на сервере и нужно перетянуть свежие.
+function clearPhotoCache() {
+  var status = document.getElementById('clearPhotoCacheStatus');
+  if (!('caches' in window)) {
+    if (status) status.textContent = '⚠️ CacheStorage не поддерживается в этом браузере';
+    return;
+  }
+  if (!confirm('Удалить все сохранённые фото из кэша браузера? Они подгрузятся заново при следующем открытии «Все изделия».')) return;
+  if (status) status.textContent = '⏳ Очистка…';
+  caches.keys()
+    .then(function(keys) {
+      return Promise.all(keys
+        .filter(function(k) { return k.indexOf('photos-') === 0; })
+        .map(function(k) { return caches.delete(k); })
+      );
+    })
+    .then(function() {
+      if (status) status.textContent = '✅ Кэш фото очищен';
+    })
+    .catch(function(e) {
+      if (status) status.textContent = '❌ Ошибка: ' + (e && e.message ? e.message : e);
+    });
 }
 
 function settingsOverlayBgClick(e) {
@@ -1959,10 +1984,16 @@ function getTableModels() {
 // 2) Замена <select> на ячейку-кликушку + общий picker — экономит тысячи DOM-узлов
 // 3) Lazy-изображения через IntersectionObserver — фото подгружаются по мере прокрутки
 // 4) Debounce поиска (200мс) — не ререндерит таблицу на каждое нажатие клавиши
+// v150) Очередь с лимитом параллельных загрузок (4) — даже первое открытие
+//        не валит сеть/CPU на слабых устройствах. После первого раза всё
+//        в дисковом кэше (Service Worker, sw.js) и открывается мгновенно.
 var _renderToken = 0;       // счётчик; при новом рендере отменяет предыдущий
 var _lazyImageObserver = null;
 var _searchDebounceTimer = null;
 var _packPickerModel = null;
+var _photoQueue = [];
+var _photoActive = 0;
+var PHOTO_CONCURRENCY = 4;
 
 function renderTableView() {
   var token = ++_renderToken;
@@ -1975,6 +2006,9 @@ function renderTableView() {
     try { _lazyImageObserver.disconnect(); } catch(e) {}
     _lazyImageObserver = null;
   }
+  // Чистим очередь lazy-фото от предыдущего рендера — иначе они продолжают
+  // занимать слоты загрузки, пока пользователь скроллит новые строки.
+  _photoQueue = [];
 
   if (!models.length) {
     tbody.innerHTML = '';
@@ -2053,14 +2087,32 @@ function _initLazyImages() {
 }
 
 function _swapLazyToImg(el) {
-  var src = el.dataset.src;
-  if (!src || !el.parentNode) return;
-  var img = document.createElement('img');
-  img.className = 'tbl-thumb';
-  img.src = src;
-  img.onclick = function() { openPhotoFullscreen(src); };
-  img.onerror = function() { img.style.display = 'none'; };
-  el.parentNode.replaceChild(img, el);
+  if (!el || !el.dataset || !el.dataset.src || !el.parentNode) return;
+  _photoQueue.push(el);
+  _drainPhotoQueue();
+}
+
+// Не более PHOTO_CONCURRENCY параллельных загрузок фото.
+// На слабых устройствах 20+ одновременных запросов забивают сеть и CPU.
+// После первого открытия фото лежат в дисковом кэше (sw.js) — отдача мгновенная.
+function _drainPhotoQueue() {
+  while (_photoActive < PHOTO_CONCURRENCY && _photoQueue.length) {
+    var el = _photoQueue.shift();
+    if (!el || !el.parentNode || !el.dataset || !el.dataset.src) continue;
+    var src = el.dataset.src;
+    _photoActive++;
+    var img = document.createElement('img');
+    img.className = 'tbl-thumb';
+    img.onclick = (function(s) { return function() { openPhotoFullscreen(s); }; })(src);
+    var done = function() {
+      _photoActive = Math.max(0, _photoActive - 1);
+      _drainPhotoQueue();
+    };
+    img.onload = done;
+    img.onerror = function() { this.style.display = 'none'; done(); };
+    img.src = src;
+    el.parentNode.replaceChild(img, el);
+  }
 }
 
 // Debounce поиска — не дёргаем рендер на каждое нажатие
@@ -3375,7 +3427,11 @@ window.onload = function() {
     });
   }
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(function() {});
+    // updateViaCache: 'none' — sw.js всегда сверяется с сервером, иначе
+    // браузер может неделями держать старую версию из HTTP-кэша.
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(function(reg) { try { reg.update(); } catch(e) {} })
+      .catch(function() {});
   }
 };
 </script>
@@ -3526,18 +3582,24 @@ window.onload = function() {
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
       <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🖼️ Кэш фотографий</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:0;margin-bottom:10px;line-height:1.5">
+        Фото из «Все изделия» сохраняются в дисковый кэш браузера (Service Worker, не RAM) и при повторном открытии таблицы подгружаются мгновенно — без сети. Кэш не пропадает при переходе на главную страницу и переживает перезапуск браузера.
+      </div>
       <label class="settings-checkbox-label">
         <input type="checkbox" id="setPrefetchPhotos">
-        Кэшировать фото при открытии «Все изделия»
+        Догружать остальные фото в фоне
       </label>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
-        При каждом открытии таблицы все фото тихо загружаются в дисковый кэш браузера. Это <b>не</b> занимает оперативную память — фото хранятся на диске и открываются мгновенно без сети.<br>
-        Для слабых устройств (2 ГБ RAM) лучше оставить <b>выключено</b> и использовать кнопку ниже вручную.
+        При открытии «Все изделия» через 4 сек начинает тихо подкачивать фото вне экрана — чтобы они тоже легли в кэш. Для слабых устройств (2 ГБ RAM) можно оставить <b>выключено</b> и использовать кнопку ниже вручную.
       </div>
       <button id="prefetchBtn" class="btn btn-secondary" style="font-size:13px" onclick="prefetchAllPhotos()">
         🖼️ Загрузить все фото в кэш
       </button>
       <div id="prefetchProgress" style="font-size:12px;color:#6b7280;margin-top:6px"></div>
+      <button class="btn btn-secondary" style="font-size:13px;margin-top:10px" onclick="clearPhotoCache()">
+        🗑️ Очистить кэш фото
+      </button>
+      <div id="clearPhotoCacheStatus" style="font-size:12px;color:#6b7280;margin-top:6px"></div>
     </div>
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
