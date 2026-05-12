@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v150</title>
+  <title>Сканер упаковки v151</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -327,6 +327,44 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .saving-text { font-size: 16px; color: #6b7280; }
+
+    /* ── v151: прогресс-бар прелоадера ── */
+    .preloader-progress {
+      width: 80%;
+      max-width: 280px;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 14px auto 0;
+      position: relative;
+    }
+    .preloader-progress-fill {
+      height: 100%;
+      background: #15803d;
+      width: 0%;
+      transition: width 0.25s ease-out;
+      border-radius: 4px;
+    }
+    /* Индетерминированная фаза: пока ждём ответ сервера — «бегающая» полоска */
+    .preloader-progress.indeterminate .preloader-progress-fill {
+      width: 35%;
+      background: linear-gradient(90deg, #15803d 0%, #4ade80 50%, #15803d 100%);
+      animation: preload-slide 1.3s ease-in-out infinite;
+      transition: none;
+    }
+    @keyframes preload-slide {
+      0%   { transform: translateX(-110%); }
+      100% { transform: translateX(330%); }
+    }
+    .preloader-counter {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 8px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      min-height: 18px;
+    }
 
     /* ── SUCCESS состояние ── */
     .success-wrap { text-align: center; padding: 20px 0; }
@@ -1026,7 +1064,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v150</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v151</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1039,7 +1077,11 @@
   <div id="preloader" class="hidden">
     <div class="saving-wrap">
       <div class="spinner"></div>
-      <div class="saving-text">Загружаю данные...</div>
+      <div class="saving-text" id="preloaderText">Загружаю данные...</div>
+      <div class="preloader-progress indeterminate" id="preloaderBarWrap">
+        <div class="preloader-progress-fill" id="preloaderBarFill"></div>
+      </div>
+      <div class="preloader-counter" id="preloaderCounter"></div>
     </div>
   </div>
 
@@ -1536,31 +1578,87 @@ function preloadAllData() {
   showPreloader(true);
   apiCall('getAllBarcodes')
     .then(function(result) {
-      showPreloader(false);
       if (result.error) {
+        showPreloader(false);
         dataLoadError = result.error;
         showError('Ошибка загрузки: ' + result.error);
-      } else {
-        barcodeToModel = result.barcodes || {};
-        // Используем список типов упаковки с сервера (лист "ФОРМУЛЫ/выпадающие списки", столбец AD)
-        if (result.packTypes && result.packTypes.length > 0) {
-          serverPackTypes = result.packTypes;
-        }
-        buildDynamicPackTypes();
-        renderPackButtons();
-        dataLoaded = true;
-        _lastRefreshAt = Date.now();
-        _updateAutoRefreshBadge();
-        if (shouldAutoFocus()) document.getElementById('barcodeInput').focus();
+        return;
       }
+      barcodeToModel = result.barcodes || {};
+      if (result.packTypes && result.packTypes.length > 0) {
+        serverPackTypes = result.packTypes;
+      }
+      buildDynamicPackTypes();
+      renderPackButtons();
+      dataLoaded = true;
+      _lastRefreshAt = Date.now();
+      _updateAutoRefreshBadge();
+
+      // Считаем уникальные модели (= товары в «Все изделия»).
+      var seenModels = {};
+      var total = 0;
+      Object.values(barcodeToModel).forEach(function(item) {
+        if (item && item.model && !seenModels[item.model]) {
+          seenModels[item.model] = true;
+          total++;
+        }
+      });
+
+      finishPreloader(total).then(function() {
+        showPreloader(false);
+        if (shouldAutoFocus()) document.getElementById('barcodeInput').focus();
+      });
     });
 }
 
 function showPreloader(show) {
-  const el = document.getElementById('preloader');
+  var el = document.getElementById('preloader');
   if (!el) return;
-  if (show) el.classList.remove('hidden');
-  else el.classList.add('hidden');
+  if (show) {
+    // Сброс в индетерминированное состояние при каждом показе
+    var bar = document.getElementById('preloaderBarWrap');
+    var fill = document.getElementById('preloaderBarFill');
+    var counter = document.getElementById('preloaderCounter');
+    var text = document.getElementById('preloaderText');
+    if (bar) bar.classList.add('indeterminate');
+    if (fill) fill.style.width = '';
+    if (counter) counter.textContent = '';
+    if (text) text.textContent = 'Загружаю данные...';
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+// Анимирует завершающую фазу прелоадера: бар 0→100% + счётчик 0→total.
+// Возвращает Promise, который резолвится по окончании анимации.
+function finishPreloader(total) {
+  return new Promise(function(resolve) {
+    var bar = document.getElementById('preloaderBarWrap');
+    var fill = document.getElementById('preloaderBarFill');
+    var counter = document.getElementById('preloaderCounter');
+    var text = document.getElementById('preloaderText');
+    if (text) text.textContent = total > 0 ? 'Обрабатываю данные...' : 'Готово';
+    if (bar) bar.classList.remove('indeterminate');
+    // Если данных нет — показываем 0/0 и сразу выходим
+    if (!total) {
+      if (fill) fill.style.width = '100%';
+      if (counter) counter.textContent = '0 / 0 товаров';
+      setTimeout(resolve, 150);
+      return;
+    }
+    var start = performance.now();
+    var DURATION = 600;
+    function tick(now) {
+      var t = Math.min(1, (now - start) / DURATION);
+      var eased = 1 - Math.pow(1 - t, 2); // ease-out
+      if (fill) fill.style.width = (eased * 100) + '%';
+      if (counter) counter.textContent = Math.round(eased * total) + ' / ' + total + ' товаров';
+      if (t < 1) requestAnimationFrame(tick);
+      else resolve();
+    }
+    requestAnimationFrame(tick);
+  });
 }
 
 // ── Фоновое обновление данных (без блокировки UI) ──
