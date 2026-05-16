@@ -1282,6 +1282,7 @@ function openSettings() {
 function closeSettings() {
   document.getElementById('settingsOverlay').classList.remove('active');
   applySettings(); // откатываем незасохранённый предпросмотр
+  setTimeout(tryRestoreFocus, 50);
 }
 
 function previewSettings() {
@@ -1405,6 +1406,7 @@ function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
   applySettings();
   document.getElementById('settingsOverlay').classList.remove('active');
+  setTimeout(tryRestoreFocus, 50);
 }
 
 // ── Предзагрузка фото в дисковый кэш браузера ──
