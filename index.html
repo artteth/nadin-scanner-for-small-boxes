@@ -1339,6 +1339,22 @@ function shouldAutoFocus() {
   return true;
 }
 
+function isAnyOverlayActive() {
+  var ids = ['settingsOverlay', 'cameraOverlay', 'tableView',
+             'packPickerOverlay', 'photoOverlay', 'blePanelOverlay', 'scannerCfgOverlay'];
+  return ids.some(function(id) {
+    var el = document.getElementById(id);
+    return el && el.classList.contains('active');
+  });
+}
+
+function tryRestoreFocus() {
+  if (!shouldAutoFocus()) return;
+  if (isAnyOverlayActive()) return;
+  var inp = document.getElementById('barcodeInput');
+  if (document.activeElement !== inp) inp.focus();
+}
+
 var UI_FLIP_KEY = 'uiFlipped_v1';
 
 function initFlip() {
@@ -1568,6 +1584,19 @@ function _setLandscapePhoto(url) {
 document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') onSearch();
 });
+
+// Постоянный автофокус: возвращаем фокус на поле ввода при потере фокуса
+document.getElementById('barcodeInput').addEventListener('blur', function() {
+  setTimeout(tryRestoreFocus, 120);
+});
+
+// Постоянный автофокус: тап мимо интерактивных элементов возвращает фокус
+document.addEventListener('touchend', function(e) {
+  if (!shouldAutoFocus() || isAnyOverlayActive()) return;
+  var tag = (e.target.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A' || tag === 'LABEL') return;
+  setTimeout(tryRestoreFocus, 50);
+}, { passive: true });
 
 /**
  * Предзагрузка всех данных при старте.
