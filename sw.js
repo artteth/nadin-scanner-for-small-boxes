@@ -4,6 +4,9 @@
 // и фото перезагружаются при каждом открытии «Все изделия».
 // CacheStorage не зависит от Cache-Control и хранит ответы (включая opaque)
 // до явного удаления или вытеснения квоты браузером.
+//
+// v153: внешний .catch() → если CacheStorage недоступна (MDM, квота),
+// фото грузятся напрямую из сети вместо провала всего запроса.
 
 var PHOTO_CACHE = 'photos-v1';
 
@@ -69,6 +72,11 @@ self.addEventListener('fetch', function(e) {
             return new Response('', { status: 504, statusText: 'Offline' });
           });
         });
+      }).catch(function() {
+        // CacheStorage недоступна (квота исчерпана, MDM-блокировка, etc.) —
+        // пропускаем кэш и грузим напрямую из сети, иначе e.respondWith()
+        // получит rejected promise и запрос упадёт полностью.
+        return fetch(req);
       })
     );
     return;
