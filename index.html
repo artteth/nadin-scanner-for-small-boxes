@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v159</title>
+  <title>Сканер упаковки v160</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1064,7 +1064,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v159</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v160</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1208,6 +1208,7 @@ var settings = {
   historyMaxItems: 10,
   autoFocus: true,
   bleNoFocus: true,
+  speakPackType: true,   // озвучивать тип упаковки голосом при находке
   autoReconnect: true,   // авто-переподключение к сканеру при обрыве
   // v143: split-layout в горизонтальной ориентации
   landscapeSplit: true,  // показывать фото отдельным блоком сбоку
@@ -1266,6 +1267,7 @@ function syncSettingsUI() {
   document.getElementById('setRefreshAfterSave').checked = settings.refreshAfterSave !== false;
   document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
   document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
+  document.getElementById('setSpeakPackType').checked = settings.speakPackType !== false;
   document.getElementById('setPrefetchPhotos').checked = !!settings.prefetchPhotos;
   document.getElementById('setAutoReconnect').checked = settings.autoReconnect !== false;
   document.getElementById('setLandscapeSplit').checked = settings.landscapeSplit !== false;
@@ -1327,6 +1329,7 @@ function readSettingsFromUI() {
     refreshAfterSave: document.getElementById('setRefreshAfterSave').checked,
     autoFocus: document.getElementById('setAutoFocus').checked,
     bleNoFocus: document.getElementById('setBleNoFocus').checked,
+    speakPackType: document.getElementById('setSpeakPackType').checked,
     autoReconnect: document.getElementById('setAutoReconnect').checked,
     landscapeSplit: document.getElementById('setLandscapeSplit').checked,
     photoOnLeft: document.getElementById('setPhotoOnLeft').checked,
@@ -1383,6 +1386,72 @@ function applyFocusState() {
   if (settings.bleNoFocus !== false && ble.connected && document.activeElement === inp) {
     inp.blur();
   }
+}
+
+// ── Голосовая озвучка типа упаковки (Web Speech API) ──
+// Работает в Chrome (Android/десктоп) и Safari (iOS 7+, включая iPhone 7 Plus
+// на iOS 15). Озвучивает текст ДО первой скобки — техинфа в «(...)» не читается.
+var _speechSupported = ('speechSynthesis' in window) &&
+                       (typeof SpeechSynthesisUtterance !== 'undefined');
+var _speechUnlocked = false;
+
+// iOS Safari требует, чтобы ПЕРВЫЙ speak() был вызван внутри жеста пользователя.
+// «Разогреваем» синтезатор пустой фразой при первом касании — после этого
+// последующие озвучки (в т.ч. по BLE/камере, вне жеста) уже разрешены.
+function unlockSpeech() {
+  if (!_speechSupported || _speechUnlocked) return;
+  try {
+    var u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    _speechUnlocked = true;
+  } catch(e) {}
+}
+
+// Берёт часть строки до первой скобки (любой из «([{»).
+function packTypeToSpeech(packType) {
+  if (!packType) return '';
+  return packType.toString().split(/[\(\[\{]/)[0].trim();
+}
+
+function speakPackType(packType) {
+  if (settings.speakPackType === false) return;
+  if (!_speechSupported) return;
+  var toSay = packTypeToSpeech(packType);
+  if (!toSay) return;
+  try {
+    window.speechSynthesis.cancel(); // прерываем предыдущую озвучку
+    var u = new SpeechSynthesisUtterance(toSay);
+    u.lang = 'ru-RU';
+    u.rate = 1.0;
+    u.volume = 1.0;
+    // По возможности выбираем русский голос (iOS/Android могут его иметь)
+    try {
+      var voices = window.speechSynthesis.getVoices() || [];
+      var ru = null;
+      for (var i = 0; i < voices.length; i++) {
+        if (/^ru/i.test(voices[i].lang || '')) { ru = voices[i]; break; }
+      }
+      if (ru) u.voice = ru;
+    } catch(e) {}
+    window.speechSynthesis.speak(u);
+  } catch(e) {}
+}
+
+// Кнопка «Проверить голос» в настройках — заодно разблокирует озвучку на iOS.
+function testSpeak() {
+  unlockSpeech();
+  if (!_speechSupported) {
+    var st = document.getElementById('speakTestStatus');
+    if (st) st.textContent = '⚠️ Озвучка не поддерживается этим браузером';
+    return;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance('коробка средняя');
+    u.lang = 'ru-RU';
+    window.speechSynthesis.speak(u);
+  } catch(e) {}
 }
 
 var UI_FLIP_KEY = 'uiFlipped_v1';
@@ -1652,6 +1721,11 @@ document.addEventListener('touchend', function(e) {
   setTimeout(tryRestoreFocus, 50);
 }, { passive: true });
 
+// Разблокировка озвучки на iOS при первом жесте пользователя (touch/click).
+// После первого разрешённого speak() последующие озвучки (BLE/камера) работают.
+document.addEventListener('touchend', unlockSpeech, { passive: true, once: true });
+document.addEventListener('click', unlockSpeech, { once: true });
+
 /**
  * Предзагрузка всех данных при старте.
  * Загружаем все штрих-коды, модели и статусы упаковки в память.
@@ -1877,6 +1951,8 @@ function onSearch() {
     }
     showState('stateAlreadyPacked');
     startTimer();
+    // Озвучиваем тип упаковки голосом (текст до скобки)
+    speakPackType(item.packType);
   } else {
     // Не упаковлено — выбор упаковки
     document.getElementById('pageTitle').style.display = 'none';
@@ -3798,6 +3874,22 @@ window.onload = function() {
       <div style="font-size:11px;color:#9ca3af;margin-top:4px">
         Работает когда «Автофокус» включён. При подключённом BLE клавиатура не появляется — сканер сам отправляет данные.
       </div>
+    </div>
+
+    <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🔊 Голосовая озвучка</div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setSpeakPackType" checked>
+        Озвучивать тип упаковки при находке
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
+        Когда отсканированное изделие уже упаковано — динамик вслух произносит тип коробки/пакета. Читается текст <b>до скобки</b> — техническая информация в «(…)» не озвучивается.<br>
+        Работает в Chrome и Safari (iPhone). На iPhone первый раз коснитесь экрана, чтобы разрешить звук.
+      </div>
+      <button class="btn btn-secondary" style="font-size:13px" onclick="testSpeak()">
+        🔊 Проверить голос
+      </button>
+      <div id="speakTestStatus" style="font-size:12px;color:#6b7280;margin-top:6px"></div>
     </div>
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
