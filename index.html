@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v164</title>
+  <title>Сканер упаковки v165</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1066,7 +1066,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v164</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v165</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1440,16 +1440,28 @@ function _getAudioCtx() {
   return _audioCtx;
 }
 
+// Прогрев аудио-вывода (iOS «холодный старт»): проигрываем 1-сэмпловый
+// тихий буфер, чтобы динамик уже был активен и настоящий тон не выходил
+// с задержкой (иначе пилик слышен позже — во время речи).
+function _warmAudio(ctx) {
+  try {
+    var b = ctx.createBuffer(1, 1, ctx.sampleRate);
+    var s = ctx.createBufferSource();
+    s.buffer = b; s.connect(ctx.destination); s.start(0);
+  } catch(e) {}
+}
+
 // Разблокировка Web Audio на iOS — тоже требует жеста пользователя.
 function unlockAudio() {
   var ctx = _getAudioCtx();
-  if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch(e) {} }
+  if (!ctx) return;
+  try { if (ctx.state !== 'running') ctx.resume(); } catch(e) {}
+  _warmAudio(ctx);
 }
 
-// Один тон с плавным нарастанием/затуханием (без щелчков).
 var CUE_GAP = 320; // пауза (мс) между окончанием пилика и началом речи
 
-// Один тон; возвращает время окончания (audio-clock).
+// Один тон с плавным нарастанием/затуханием (без щелчков). Возвращает осциллятор.
 function _tone(ctx, freq, startT, dur, gainVal, type) {
   var osc = ctx.createOscillator();
   var g = ctx.createGain();
@@ -1462,43 +1474,48 @@ function _tone(ctx, freq, startT, dur, gainVal, type) {
   g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
   osc.start(startT);
   osc.stop(startT + dur + 0.02);
-  return startT + dur;
+  return osc;
 }
 
-// Ядро: проигрывает сигнал заданной громкости (%), затем (после реального
-// окончания пилика + пауза CUE_GAP) вызывает onDone — чтобы речь шла ПОСЛЕ звука.
-// Сначала гарантированно resume() контекста (иначе на iOS пилик «съезжает» на речь).
+// Ядро: проигрывает сигнал заданной громкости (%), затем (по РЕАЛЬНОМУ
+// окончанию последнего тона + пауза CUE_GAP) вызывает onDone — чтобы речь
+// шла ПОСЛЕ звука. Прогреваем вывод и ждём onended, а не таймер по clock —
+// иначе на iOS пилик «съезжает» и звучит уже во время речи.
 function _emitCue(kind, volPct, onDone) {
   var ctx = _getAudioCtx();
-  var done = function() { if (onDone) onDone(); };
+  var fired = false;
+  var done = function() { if (fired) return; fired = true; if (onDone) onDone(); };
   if (!ctx) { setTimeout(done, 0); return; }
 
   var play = function() {
+    _warmAudio(ctx); // убираем задержку холодного старта именно этого пилика
     var vol = Math.max(0, Math.min((volPct || 100) / 100, 1));
     var g = 0.22 * vol;
     if (g <= 0) { done(); return; }
-    var t = ctx.currentTime + 0.03;
-    var end = t;
+    var t = ctx.currentTime + 0.06;
+    var end = t, lastOsc = null;
     try {
       if (kind === 'success') {
         // Два восходящих «пилика» — удачный исход
         _tone(ctx, 880, t, 0.09, g, 'sine');
-        end = _tone(ctx, 1320, t + 0.10, 0.12, g, 'sine');
+        lastOsc = _tone(ctx, 1320, t + 0.10, 0.12, g, 'sine'); end = t + 0.10 + 0.12;
       } else if (kind === 'error') {
         // Два низких резких тона — ошибка
         _tone(ctx, 320, t, 0.17, g, 'square');
-        end = _tone(ctx, 200, t + 0.19, 0.24, g, 'square');
+        lastOsc = _tone(ctx, 200, t + 0.19, 0.24, g, 'square'); end = t + 0.19 + 0.24;
       } else {
         // Один средний тон — нужно выбрать упаковку
-        end = _tone(ctx, 660, t, 0.15, g, 'sine');
+        lastOsc = _tone(ctx, 660, t, 0.15, g, 'sine'); end = t + 0.15;
       }
     } catch(e) {}
-    // Речь — после фактического окончания пилика + пауза
-    var ms = Math.max(0, (end - ctx.currentTime) * 1000) + CUE_GAP;
+    // Речь запускаем по факту окончания последнего тона + пауза.
+    if (lastOsc) { try { lastOsc.onended = function() { setTimeout(done, CUE_GAP); }; } catch(e) {} }
+    // Фолбэк, если onended не сработал (некоторые webview): с запасом.
+    var ms = Math.max(0, (end - ctx.currentTime) * 1000) + CUE_GAP + 500;
     setTimeout(done, ms);
   };
 
-  if (ctx.state === 'suspended') {
+  if (ctx.state !== 'running') {
     try { ctx.resume().then(play).catch(play); } catch(e) { play(); }
   } else {
     play();
@@ -1889,11 +1906,13 @@ document.addEventListener('touchend', function(e) {
   setTimeout(tryRestoreFocus, 50);
 }, { passive: true });
 
-// Разблокировка озвучки И звуковых сигналов на iOS при первом жесте (touch/click).
-// После первого разрешённого speak()/resume() звук работает и по BLE/камере.
+// Разблокировка озвучки И звуковых сигналов на iOS при жестах (touch/click).
+// unlockSpeech отрабатывает один раз (внутренний флаг), а unlockAudio
+// прогревает аудио-вывод на КАЖДОМ касании — чтобы контекст не «остывал»
+// и пилик по BLE/камере не выходил с задержкой во время речи.
 function _unlockAudioAndSpeech() { unlockSpeech(); unlockAudio(); }
-document.addEventListener('touchend', _unlockAudioAndSpeech, { passive: true, once: true });
-document.addEventListener('click', _unlockAudioAndSpeech, { once: true });
+document.addEventListener('touchend', _unlockAudioAndSpeech, { passive: true });
+document.addEventListener('click', _unlockAudioAndSpeech);
 
 /**
  * Предзагрузка всех данных при старте.
