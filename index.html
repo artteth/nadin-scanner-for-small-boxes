@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v157</title>
+  <title>Сканер упаковки v158</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1064,7 +1064,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v157</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v158</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1098,7 +1098,7 @@
   <div id="stateIdle">
     <p class="barcode-label">Введите штрих-код или номер модели</p>
     <div class="search-row">
-      <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <input type="text" id="barcodeInput" placeholder="Штрих-код или модель..." autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
       <button class="btn-find" onclick="onSearch()">Найти</button>
     </div>
     <div class="scan-btn-row" id="scanRowBasic">
@@ -1352,8 +1352,37 @@ function isAnyOverlayActive() {
 function tryRestoreFocus() {
   if (!shouldAutoFocus()) return;
   if (isAnyOverlayActive()) return;
+  // Фокус ставим только на главном экране (stateIdle) и когда данные загружены —
+  // иначе клавиатура выскакивает поверх прелоадера или во время выбора упаковки.
+  var pre = document.getElementById('preloader');
+  if (pre && !pre.classList.contains('hidden')) return;
+  var idle = document.getElementById('stateIdle');
+  if (!idle || idle.classList.contains('hidden')) return;
   var inp = document.getElementById('barcodeInput');
-  if (document.activeElement !== inp) inp.focus();
+  if (!inp) return;
+  if (document.activeElement !== inp) {
+    // preventScroll — не дёргаем layout/вьюпорт при всплытии клавиатуры на мобиле
+    try { inp.focus({ preventScroll: true }); } catch(e) { inp.focus(); }
+  }
+}
+
+// Централизованный пересчёт состояния фокуса/клавиатуры.
+// Вызывается при старте, смене статуса BLE, закрытии оверлеев и в goIdle.
+// Когда автофокус разрешён — возвращает фокус на поле; когда активен BLE
+// с bleNoFocus — снимает фокус, чтобы спрятать экранную клавиатуру (BLE-сканы
+// пишутся в .value напрямую и ручной ввод не требуется). Поле НЕ блокируется:
+// при желании пользователь может тапнуть по нему и ввести код вручную.
+function applyFocusState() {
+  var inp = document.getElementById('barcodeInput');
+  if (!inp) return;
+  if (shouldAutoFocus()) {
+    tryRestoreFocus();
+    return;
+  }
+  // Автофокус выключен ИЛИ активен BLE (bleNoFocus) — прячем клавиатуру.
+  if (settings.bleNoFocus !== false && ble.connected && document.activeElement === inp) {
+    inp.blur();
+  }
 }
 
 var UI_FLIP_KEY = 'uiFlipped_v1';
@@ -1595,7 +1624,7 @@ function goIdle() {
   document.getElementById('scanInfo').classList.add('hidden');
   _setLandscapePhoto('');
   showState('stateIdle');
-  if (shouldAutoFocus()) setTimeout(() => document.getElementById('barcodeInput').focus(), 100);
+  setTimeout(applyFocusState, 100);
 }
 
 // v143: устанавливает фото в боковой блок (landscape split). Пустая строка — скрыть.
@@ -1660,7 +1689,7 @@ function preloadAllData() {
 
       finishPreloader(total).then(function() {
         showPreloader(false);
-        if (shouldAutoFocus()) document.getElementById('barcodeInput').focus();
+        applyFocusState();
       });
     });
 }
@@ -2069,6 +2098,7 @@ function closeTableView() {
   }
   stopPrefetch(); // прерываем фоновую загрузку — пользователь вышел из таблицы
   document.getElementById('tableView').classList.remove('active');
+  setTimeout(applyFocusState, 50);
 }
 
 function buildTypeTabs() {
@@ -2296,6 +2326,7 @@ function openPackPicker(model, currentValue) {
 function closePackPicker() {
   document.getElementById('packPickerOverlay').classList.remove('active');
   _packPickerModel = null;
+  setTimeout(applyFocusState, 50);
 }
 
 function _onPackPickerClick(e) {
@@ -2525,6 +2556,7 @@ function openScannerCfg(mode) {
 
 function closeScannerCfg() {
   document.getElementById('scannerCfgOverlay').classList.remove('active');
+  setTimeout(applyFocusState, 50);
 }
 
 function saveScannerCfg() {
@@ -2835,6 +2867,11 @@ function closeCamera() {
   // Прячем и сбрасываем фонарик
   var tb = document.getElementById('torchBtn');
   if (tb) { tb.classList.remove('visible','on'); }
+
+  // Возврат фокуса, если после закрытия камеры остаёмся на главном экране.
+  // (В сценарии «отсканировали код» tryRestoreFocus сам ничего не сделает —
+  // к моменту таймера уже показан экран результата, не stateIdle.)
+  setTimeout(applyFocusState, 50);
 }
 
 // ── Фонарик (torch) ──
@@ -2885,6 +2922,7 @@ function openPhotoFullscreen(src) {
 function closePhotoFullscreen() {
   var overlay = document.getElementById('photoOverlay');
   if (overlay) overlay.classList.remove('active');
+  setTimeout(applyFocusState, 50);
 }
 
 // ═══════════════════════════════════════════════
@@ -3430,6 +3468,11 @@ var ble = {
     if (fb) { fb.style.display = (!this.connected && this.savedDeviceName) ? '' : 'none'; }
     // Кнопка «Выбрать другой» — только если не подключён и есть сохранённое
     if (ob) { ob.style.display = (!this.connected && this.savedDeviceName) ? '' : 'none'; }
+
+    // Статус BLE изменился — пересчитываем фокус/клавиатуру.
+    // Подключились → прячем клавиатуру; отключились → возвращаем фокус.
+    // (updateUI не вызывается в пути приёма пакетов, только при connect/disconnect.)
+    if (typeof applyFocusState === 'function') applyFocusState();
   },
 
   // Безопасная привязка gattserverdisconnected: удаляем старый перед добавлением нового.
@@ -3539,6 +3582,7 @@ function openBlePanel() {
 }
 function closeBlePanel() {
   document.getElementById('blePanelOverlay').classList.remove('active');
+  setTimeout(applyFocusState, 50);
 }
 function bleConnect() { ble.connect(); }
 function bleDisconnect() { ble.disconnect(); }
@@ -3576,6 +3620,9 @@ window.onload = function() {
   if (ble.savedDeviceName) {
     ble.reconnect().then(function(ok) {
       if (ok) bleToast('🔗 Автоподключение: ' + ble.savedDeviceName);
+      // Реконнект мог завершиться уже после автофокуса из preloadAllData —
+      // пересчитываем состояние, чтобы спрятать клавиатуру при успешном BLE.
+      applyFocusState();
     });
   }
   if ('serviceWorker' in navigator) {
