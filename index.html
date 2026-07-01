@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v162</title>
+  <title>Сканер упаковки v163</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1066,7 +1066,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v162</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v163</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1492,11 +1492,13 @@ function playCue(kind) {
   _emitCue(kind, settings.speakVolume || 100);
 }
 
-// Длительность сигнала (мс) — чтобы голос стартовал ПОСЛЕ пилика
+// Задержка перед речью = длительность сигнала + небольшая пауза,
+// чтобы между пиликом и голосом был слышимый разрыв (как пауза у «повторяю»).
 function _cueDelay(kind) {
-  if (kind === 'error') return 430;
-  if (kind === 'success') return 250;
-  return 190;
+  var CUE_GAP = 320; // пауза после сигнала перед голосом
+  if (kind === 'error') return 430 + CUE_GAP;    // сигнал ~430мс
+  if (kind === 'success') return 220 + CUE_GAP;  // сигнал ~220мс
+  return 150 + CUE_GAP;                          // select ~150мс
 }
 
 // Сигнал + голосовая озвучка (голос — с задержкой, чтобы не наложиться на пилик)
