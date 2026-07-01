@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v160</title>
+  <title>Сканер упаковки v161</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -563,7 +563,9 @@
     .tbl-table tbody tr.is-packed { background: #f0fdf4; }
     .tbl-table tbody tr.tbl-changed { background: #fefce8; }
     .tbl-table td { padding: 7px 10px; font-size: clamp(12px, 3vw, 13px); color: #111827; vertical-align: middle; white-space: nowrap; }
-    .tbl-model { font-family: monospace; font-weight: 600; }
+    /* Разрешаем выделять/копировать текст в таблице (body по умолчанию user-select:none) */
+    .tbl-table th, .tbl-table td { -webkit-user-select: text; user-select: text; }
+    .tbl-model { font-family: monospace; font-weight: 600; -webkit-user-select: text; user-select: text; cursor: text; }
     .tbl-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; cursor: pointer; display: block; }
     /* v141: placeholder вместо <img> до момента, когда строка попадёт во viewport */
     .tbl-thumb-lazy { width: 38px; height: 38px; border-radius: 6px; background: #f3f4f6; display: block; }
@@ -1064,7 +1066,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v160</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v161</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1209,6 +1211,8 @@ var settings = {
   autoFocus: true,
   bleNoFocus: true,
   speakPackType: true,   // озвучивать тип упаковки голосом при находке
+  speakVolume: 100,      // громкость озвучки в % (100 = норма, до 300 = усиление)
+  speakRepeats: 1,       // сколько раз повторять озвучку (1 = без повтора)
   autoReconnect: true,   // авто-переподключение к сканеру при обрыве
   // v143: split-layout в горизонтальной ориентации
   landscapeSplit: true,  // показывать фото отдельным блоком сбоку
@@ -1268,6 +1272,10 @@ function syncSettingsUI() {
   document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
   document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
   document.getElementById('setSpeakPackType').checked = settings.speakPackType !== false;
+  document.getElementById('setSpeakVolume').value = settings.speakVolume || 100;
+  document.getElementById('setSpeakVolumeVal').textContent = settings.speakVolume || 100;
+  document.getElementById('setSpeakRepeats').value = settings.speakRepeats || 1;
+  document.getElementById('setSpeakRepeatsVal').textContent = settings.speakRepeats || 1;
   document.getElementById('setPrefetchPhotos').checked = !!settings.prefetchPhotos;
   document.getElementById('setAutoReconnect').checked = settings.autoReconnect !== false;
   document.getElementById('setLandscapeSplit').checked = settings.landscapeSplit !== false;
@@ -1330,6 +1338,8 @@ function readSettingsFromUI() {
     autoFocus: document.getElementById('setAutoFocus').checked,
     bleNoFocus: document.getElementById('setBleNoFocus').checked,
     speakPackType: document.getElementById('setSpeakPackType').checked,
+    speakVolume: parseInt(document.getElementById('setSpeakVolume').value) || 100,
+    speakRepeats: parseInt(document.getElementById('setSpeakRepeats').value) || 1,
     autoReconnect: document.getElementById('setAutoReconnect').checked,
     landscapeSplit: document.getElementById('setLandscapeSplit').checked,
     photoOnLeft: document.getElementById('setPhotoOnLeft').checked,
@@ -1414,44 +1424,93 @@ function packTypeToSpeech(packType) {
   return packType.toString().split(/[\(\[\{]/)[0].trim();
 }
 
+var _speechTimer = null;
+var _speechGen = 0; // токен поколения: новый запрос отменяет старую последовательность
+
+// Выбирает русский голос из доступных (iOS/Android могут его иметь)
+function _pickRuVoice() {
+  try {
+    var voices = window.speechSynthesis.getVoices() || [];
+    for (var i = 0; i < voices.length; i++) {
+      if (/^ru/i.test(voices[i].lang || '')) return voices[i];
+    }
+  } catch(e) {}
+  return null;
+}
+
+// Создаёт озвучку с нужной громкостью (%). API ограничивает volume до 1.0 —
+// значения выше 100% упираются в системный максимум (громче можно только
+// прибавив громкость устройства).
+function _makeUtterance(text, volPct) {
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ru-RU';
+  u.rate = 1.0;
+  u.volume = Math.max(0, Math.min((volPct || 100) / 100, 1));
+  var ru = _pickRuVoice();
+  if (ru) u.voice = ru;
+  return u;
+}
+
+// Проигрывает последовательность шагов: { say: 'текст' } или { pause: мс }.
+// Паузы между фразами дают «выделение» слова «повторяю».
+function _runSpeechSteps(steps, idx, volPct, gen) {
+  if (gen !== _speechGen) return;         // последовательность отменена новым запросом
+  if (idx >= steps.length) return;
+  var step = steps[idx];
+  if (step.pause) {
+    _speechTimer = setTimeout(function() { _runSpeechSteps(steps, idx + 1, volPct, gen); }, step.pause);
+    return;
+  }
+  var u = _makeUtterance(step.say, volPct);
+  u.onend = function() { _runSpeechSteps(steps, idx + 1, volPct, gen); };
+  u.onerror = function() { _runSpeechSteps(steps, idx + 1, volPct, gen); };
+  try { window.speechSynthesis.speak(u); }
+  catch(e) { _runSpeechSteps(steps, idx + 1, volPct, gen); }
+}
+
+// Озвучивает текст с заданными громкостью и числом повторов.
+// При повторах между копиями вставляется пауза + «повторяю» + пауза.
+function speakText(text, volPct, repeats) {
+  if (!_speechSupported || !text) return;
+  volPct = volPct || (settings.speakVolume || 100);
+  repeats = Math.max(1, Math.min(parseInt(repeats || settings.speakRepeats || 1, 10) || 1, 10));
+
+  var steps = [];
+  for (var r = 0; r < repeats; r++) {
+    if (r > 0) {
+      steps.push({ pause: 450 });
+      steps.push({ say: 'повторяю' });
+      steps.push({ pause: 350 });
+    }
+    steps.push({ say: text });
+  }
+
+  var gen = ++_speechGen; // отменяем предыдущую последовательность (её onend/onerror выйдут по gen)
+  if (_speechTimer) { clearTimeout(_speechTimer); _speechTimer = null; }
+  try { window.speechSynthesis.cancel(); } catch(e) {}
+  _runSpeechSteps(steps, 0, volPct, gen);
+}
+
 function speakPackType(packType) {
   if (settings.speakPackType === false) return;
-  if (!_speechSupported) return;
   var toSay = packTypeToSpeech(packType);
   if (!toSay) return;
-  try {
-    window.speechSynthesis.cancel(); // прерываем предыдущую озвучку
-    var u = new SpeechSynthesisUtterance(toSay);
-    u.lang = 'ru-RU';
-    u.rate = 1.0;
-    u.volume = 1.0;
-    // По возможности выбираем русский голос (iOS/Android могут его иметь)
-    try {
-      var voices = window.speechSynthesis.getVoices() || [];
-      var ru = null;
-      for (var i = 0; i < voices.length; i++) {
-        if (/^ru/i.test(voices[i].lang || '')) { ru = voices[i]; break; }
-      }
-      if (ru) u.voice = ru;
-    } catch(e) {}
-    window.speechSynthesis.speak(u);
-  } catch(e) {}
+  speakText(toSay);
 }
 
 // Кнопка «Проверить голос» в настройках — заодно разблокирует озвучку на iOS.
+// Использует ТЕКУЩИЕ значения ползунков (не сохранённые), чтобы слышать эффект.
 function testSpeak() {
   unlockSpeech();
+  var st = document.getElementById('speakTestStatus');
   if (!_speechSupported) {
-    var st = document.getElementById('speakTestStatus');
     if (st) st.textContent = '⚠️ Озвучка не поддерживается этим браузером';
     return;
   }
-  try {
-    window.speechSynthesis.cancel();
-    var u = new SpeechSynthesisUtterance('коробка средняя');
-    u.lang = 'ru-RU';
-    window.speechSynthesis.speak(u);
-  } catch(e) {}
+  if (st) st.textContent = '';
+  var vol = parseInt(document.getElementById('setSpeakVolume').value) || 100;
+  var rep = parseInt(document.getElementById('setSpeakRepeats').value) || 1;
+  speakText('минус 3 сантиметра коробка S', vol, rep);
 }
 
 var UI_FLIP_KEY = 'uiFlipped_v1';
@@ -3882,10 +3941,25 @@ window.onload = function() {
         <input type="checkbox" id="setSpeakPackType" checked>
         Озвучивать тип упаковки при находке
       </label>
-      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
         Когда отсканированное изделие уже упаковано — динамик вслух произносит тип коробки/пакета. Читается текст <b>до скобки</b> — техническая информация в «(…)» не озвучивается.<br>
         Работает в Chrome и Safari (iPhone). На iPhone первый раз коснитесь экрана, чтобы разрешить звук.
       </div>
+
+      <div class="settings-label">Громкость озвучки: <b id="setSpeakVolumeVal">100</b> %</div>
+      <input type="range" id="setSpeakVolume" class="settings-range" min="10" max="300" step="10" value="100"
+        oninput="document.getElementById('setSpeakVolumeVal').textContent=this.value">
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
+        100% — обычная громкость. Выше 100% браузер может не сделать громче (упирается в системный максимум) — тогда прибавьте громкость на самом устройстве.
+      </div>
+
+      <div class="settings-label">Повторов озвучки: <b id="setSpeakRepeatsVal">1</b></div>
+      <input type="range" id="setSpeakRepeats" class="settings-range" min="1" max="5" step="1" value="1"
+        oninput="document.getElementById('setSpeakRepeatsVal').textContent=this.value">
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
+        Сколько раз проговаривать. При повторе перед каждым добавляется пауза и слово «повторяю» (напр. «коробка S … повторяю … коробка S»).
+      </div>
+
       <button class="btn btn-secondary" style="font-size:13px" onclick="testSpeak()">
         🔊 Проверить голос
       </button>
