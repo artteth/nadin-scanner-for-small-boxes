@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v161</title>
+  <title>Сканер упаковки v162</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1066,7 +1066,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v161</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v162</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1211,7 +1211,8 @@ var settings = {
   autoFocus: true,
   bleNoFocus: true,
   speakPackType: true,   // озвучивать тип упаковки голосом при находке
-  speakVolume: 100,      // громкость озвучки в % (100 = норма, до 300 = усиление)
+  soundCues: true,       // звуковые сигналы (пилик) перед озвучкой
+  speakVolume: 100,      // громкость озвучки/сигналов в % (максимум 100)
   speakRepeats: 1,       // сколько раз повторять озвучку (1 = без повтора)
   autoReconnect: true,   // авто-переподключение к сканеру при обрыве
   // v143: split-layout в горизонтальной ориентации
@@ -1272,6 +1273,7 @@ function syncSettingsUI() {
   document.getElementById('setAutoFocus').checked = settings.autoFocus !== false;
   document.getElementById('setBleNoFocus').checked = settings.bleNoFocus !== false;
   document.getElementById('setSpeakPackType').checked = settings.speakPackType !== false;
+  document.getElementById('setSoundCues').checked = settings.soundCues !== false;
   document.getElementById('setSpeakVolume').value = settings.speakVolume || 100;
   document.getElementById('setSpeakVolumeVal').textContent = settings.speakVolume || 100;
   document.getElementById('setSpeakRepeats').value = settings.speakRepeats || 1;
@@ -1338,6 +1340,7 @@ function readSettingsFromUI() {
     autoFocus: document.getElementById('setAutoFocus').checked,
     bleNoFocus: document.getElementById('setBleNoFocus').checked,
     speakPackType: document.getElementById('setSpeakPackType').checked,
+    soundCues: document.getElementById('setSoundCues').checked,
     speakVolume: parseInt(document.getElementById('setSpeakVolume').value) || 100,
     speakRepeats: parseInt(document.getElementById('setSpeakRepeats').value) || 1,
     autoReconnect: document.getElementById('setAutoReconnect').checked,
@@ -1424,6 +1427,91 @@ function packTypeToSpeech(packType) {
   return packType.toString().split(/[\(\[\{]/)[0].trim();
 }
 
+// ── Звуковые сигналы (пилик) через Web Audio API ──
+// Короткий тон перед голосовой озвучкой: успех / ошибка / выбор упаковки.
+var _audioCtx = null;
+function _getAudioCtx() {
+  if (_audioCtx) return _audioCtx;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    _audioCtx = new AC();
+  } catch(e) { return null; }
+  return _audioCtx;
+}
+
+// Разблокировка Web Audio на iOS — тоже требует жеста пользователя.
+function unlockAudio() {
+  var ctx = _getAudioCtx();
+  if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch(e) {} }
+}
+
+// Один тон с плавным нарастанием/затуханием (без щелчков).
+function _tone(ctx, freq, startT, dur, gainVal, type) {
+  var osc = ctx.createOscillator();
+  var g = ctx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  osc.connect(g); g.connect(ctx.destination);
+  g.gain.setValueAtTime(0.0001, startT);
+  g.gain.exponentialRampToValueAtTime(Math.max(gainVal, 0.0002), startT + 0.012);
+  g.gain.setValueAtTime(Math.max(gainVal, 0.0002), startT + dur - 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
+  osc.start(startT);
+  osc.stop(startT + dur + 0.02);
+}
+
+// Ядро: всегда проигрывает сигнал заданной громкости (%). Используется тестом.
+function _emitCue(kind, volPct) {
+  var ctx = _getAudioCtx();
+  if (!ctx) return;
+  try { if (ctx.state === 'suspended') ctx.resume(); } catch(e) {}
+  var vol = Math.max(0, Math.min((volPct || 100) / 100, 1));
+  var g = 0.22 * vol;
+  if (g <= 0) return;
+  var t = ctx.currentTime + 0.01;
+  try {
+    if (kind === 'success') {
+      // Два восходящих «пилика» — удачный исход
+      _tone(ctx, 880, t, 0.09, g, 'sine');
+      _tone(ctx, 1320, t + 0.10, 0.12, g, 'sine');
+    } else if (kind === 'error') {
+      // Два низких резких тона — ошибка
+      _tone(ctx, 320, t, 0.17, g, 'square');
+      _tone(ctx, 200, t + 0.19, 0.24, g, 'square');
+    } else {
+      // Один средний тон — нужно выбрать упаковку
+      _tone(ctx, 660, t, 0.15, g, 'sine');
+    }
+  } catch(e) {}
+}
+
+// Проигрывает сигнал с учётом тумблера и громкости из настроек.
+function playCue(kind) {
+  if (settings.soundCues === false) return;
+  _emitCue(kind, settings.speakVolume || 100);
+}
+
+// Длительность сигнала (мс) — чтобы голос стартовал ПОСЛЕ пилика
+function _cueDelay(kind) {
+  if (kind === 'error') return 430;
+  if (kind === 'success') return 250;
+  return 190;
+}
+
+// Сигнал + голосовая озвучка (голос — с задержкой, чтобы не наложиться на пилик)
+function cueAndSpeak(kind, text) {
+  playCue(kind);
+  if (!text) return;
+  setTimeout(function() { speakAnnouncement(text); }, _cueDelay(kind));
+}
+
+// Голосовая подсказка (гейт общего тумблера озвучки)
+function speakAnnouncement(text) {
+  if (settings.speakPackType === false) return;
+  speakText(text);
+}
+
 var _speechTimer = null;
 var _speechGen = 0; // токен поколения: новый запрос отменяет старую последовательность
 
@@ -1502,15 +1590,19 @@ function speakPackType(packType) {
 // Использует ТЕКУЩИЕ значения ползунков (не сохранённые), чтобы слышать эффект.
 function testSpeak() {
   unlockSpeech();
+  unlockAudio();
   var st = document.getElementById('speakTestStatus');
+  var vol = parseInt(document.getElementById('setSpeakVolume').value) || 100;
+  var rep = parseInt(document.getElementById('setSpeakRepeats').value) || 1;
+  // Тестовый сигнал успеха текущей громкости — всегда (чтобы проверить звук)
+  _emitCue('success', vol);
   if (!_speechSupported) {
-    if (st) st.textContent = '⚠️ Озвучка не поддерживается этим браузером';
+    if (st) st.textContent = '🔊 Сигнал есть; голос не поддерживается этим браузером';
     return;
   }
   if (st) st.textContent = '';
-  var vol = parseInt(document.getElementById('setSpeakVolume').value) || 100;
-  var rep = parseInt(document.getElementById('setSpeakRepeats').value) || 1;
-  speakText('минус 3 сантиметра коробка S', vol, rep);
+  // Голос — после сигнала
+  setTimeout(function() { speakText('минус 3 сантиметра коробка S', vol, rep); }, _cueDelay('success'));
 }
 
 var UI_FLIP_KEY = 'uiFlipped_v1';
@@ -1780,10 +1872,11 @@ document.addEventListener('touchend', function(e) {
   setTimeout(tryRestoreFocus, 50);
 }, { passive: true });
 
-// Разблокировка озвучки на iOS при первом жесте пользователя (touch/click).
-// После первого разрешённого speak() последующие озвучки (BLE/камера) работают.
-document.addEventListener('touchend', unlockSpeech, { passive: true, once: true });
-document.addEventListener('click', unlockSpeech, { once: true });
+// Разблокировка озвучки И звуковых сигналов на iOS при первом жесте (touch/click).
+// После первого разрешённого speak()/resume() звук работает и по BLE/камере.
+function _unlockAudioAndSpeech() { unlockSpeech(); unlockAudio(); }
+document.addEventListener('touchend', _unlockAudioAndSpeech, { passive: true, once: true });
+document.addEventListener('click', _unlockAudioAndSpeech, { once: true });
 
 /**
  * Предзагрузка всех данных при старте.
@@ -1969,6 +2062,8 @@ function onSearch() {
     document.getElementById('pageTitle').style.display = 'none';
     showError('Штрих-код или модель не найдены');
     startErrorTimer();
+    // Сигнал ошибки + голос
+    cueAndSpeak('error', 'Ошибка. Ничего не найдено по данному коду');
     return;
   }
 
@@ -2010,8 +2105,9 @@ function onSearch() {
     }
     showState('stateAlreadyPacked');
     startTimer();
-    // Озвучиваем тип упаковки голосом (текст до скобки)
-    speakPackType(item.packType);
+    // Пилик успеха, затем озвучка типа упаковки (текст до скобки)
+    playCue('success');
+    (function(pt){ setTimeout(function(){ speakPackType(pt); }, _cueDelay('success')); })(item.packType);
   } else {
     // Не упаковлено — выбор упаковки
     document.getElementById('pageTitle').style.display = 'none';
@@ -2023,6 +2119,8 @@ function onSearch() {
   var saveBtn = document.getElementById('btnSavePack');
   if(saveBtn){ saveBtn.style.opacity='0.4'; saveBtn.style.pointerEvents='none'; }
   showState('stateSelectPack');
+    // Средний сигнал + голосовая подсказка
+    cueAndSpeak('select', 'Выберите упаковку и нажмите сохранить');
   }
 }
 
@@ -3936,21 +4034,28 @@ window.onload = function() {
     </div>
 
     <div class="settings-group" style="border-top:1px solid #f3f4f6;padding-top:14px;margin-top:4px">
-      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🔊 Голосовая озвучка</div>
+      <div class="settings-label" style="font-weight:700;font-size:14px;margin-bottom:10px">🔊 Звук и озвучка</div>
+      <label class="settings-checkbox-label">
+        <input type="checkbox" id="setSoundCues" checked>
+        Звуковые сигналы (пилик)
+      </label>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
+        Короткий сигнал при находке: <b>успех</b> — два восходящих пилика, <b>ошибка</b> — низкий сигнал, <b>нужно выбрать упаковку</b> — средний тон. Затем идёт голосовая подсказка.
+      </div>
       <label class="settings-checkbox-label">
         <input type="checkbox" id="setSpeakPackType" checked>
-        Озвучивать тип упаковки при находке
+        Голосовая озвучка (тип упаковки, ошибки, подсказки)
       </label>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
-        Когда отсканированное изделие уже упаковано — динамик вслух произносит тип коробки/пакета. Читается текст <b>до скобки</b> — техническая информация в «(…)» не озвучивается.<br>
+        Тип коробки/пакета озвучивается <b>до скобки</b> — техинфа в «(…)» не читается. Ошибка: «ничего не найдено». Не упаковано: «выберите упаковку и нажмите сохранить».<br>
         Работает в Chrome и Safari (iPhone). На iPhone первый раз коснитесь экрана, чтобы разрешить звук.
       </div>
 
-      <div class="settings-label">Громкость озвучки: <b id="setSpeakVolumeVal">100</b> %</div>
-      <input type="range" id="setSpeakVolume" class="settings-range" min="10" max="300" step="10" value="100"
+      <div class="settings-label">Громкость: <b id="setSpeakVolumeVal">100</b> %</div>
+      <input type="range" id="setSpeakVolume" class="settings-range" min="10" max="100" step="10" value="100"
         oninput="document.getElementById('setSpeakVolumeVal').textContent=this.value">
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:12px">
-        100% — обычная громкость. Выше 100% браузер может не сделать громче (упирается в системный максимум) — тогда прибавьте громкость на самом устройстве.
+        Громкость сигналов и голоса. Максимум 100% (системный предел браузера) — если нужно громче, прибавьте громкость на самом устройстве.
       </div>
 
       <div class="settings-label">Повторов озвучки: <b id="setSpeakRepeatsVal">1</b></div>
