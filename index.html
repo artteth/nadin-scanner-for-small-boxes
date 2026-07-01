@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v158</title>
+  <title>Сканер упаковки v159</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1064,7 +1064,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v158</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v159</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -2075,6 +2075,11 @@ function openTableView() {
   document.getElementById('tblSearch').value = '';
   view.classList.add('active'); // запускаем анимацию
   // Даём анимации 50 мс стартануть плавно, потом тяжёлый рендер
+  // По умолчанию открываем не «Все», а первую вкладку-категорию —
+  // строк сразу меньше, таблица открывается быстрее на слабых устройствах.
+  // Пользователь при желании переключится на «Все» или другую категорию.
+  var _types = getTableTypes();
+  tableActiveType = _types.length ? _types[0] : '';
   setTimeout(function() {
     var h = document.querySelector('.tbl-topbar').offsetHeight;
     document.documentElement.style.setProperty('--tbl-topbar-h', h + 'px');
@@ -2101,12 +2106,17 @@ function closeTableView() {
   setTimeout(applyFocusState, 50);
 }
 
-function buildTypeTabs() {
+// Отсортированный список типов изделий (для вкладок и выбора вкладки по умолчанию)
+function getTableTypes() {
   var types = new Set();
   Object.values(barcodeToModel).forEach(function(item) {
     if (item.type) types.add(item.type);
   });
-  types = Array.from(types).sort();
+  return Array.from(types).sort();
+}
+
+function buildTypeTabs() {
+  var types = getTableTypes();
 
   var wrap = document.getElementById('tblTabsWrap');
   if (!types.length) { wrap.style.display = 'none'; return; }
@@ -2177,9 +2187,19 @@ var _photoQueue = [];
 var _photoActive = 0;
 var PHOTO_CONCURRENCY = 4;
 
+// ── Постраничный рендер таблицы ──
+// Вместо создания всех строк сразу рендерим страницами по PAGE_SIZE и
+// догружаем следующую при подходе скролла к низу. DOM остаётся маленьким,
+// открытие/скролл быстрые даже на старом Android 8 webview (без Intersection
+// observer/content-visibility — обычный scroll-листенер работает везде).
+var _tableModels = [];      // текущий отфильтрованный+отсортированный список
+var _tableShown = 0;        // сколько строк уже отрисовано
+var TABLE_PAGE_SIZE = 60;
+
 function renderTableView() {
   var token = ++_renderToken;
-  var models = getTableModels();
+  _tableModels = getTableModels();
+  _tableShown = 0;
   var tbody = document.getElementById('tblBody');
   var empty = document.getElementById('tblEmpty');
 
@@ -2192,31 +2212,49 @@ function renderTableView() {
   // занимать слоты загрузки, пока пользователь скроллит новые строки.
   _photoQueue = [];
 
-  if (!models.length) {
+  // Новый набор результатов — скроллим таблицу к началу
+  var scroller = document.getElementById('tableView');
+  if (scroller) scroller.scrollTop = 0;
+
+  if (!_tableModels.length) {
     tbody.innerHTML = '';
     empty.style.display = '';
     return;
   }
   empty.style.display = 'none';
   tbody.innerHTML = '';
+  _renderNextPage(token);
+}
 
-  var CHUNK_SIZE = 50;
-  var i = 0;
+// Дорисовывает следующую страницу строк и подключает lazy-фото для них.
+function _renderNextPage(token) {
+  if (token !== _renderToken) return;       // запрос отменён новым рендером
+  if (_tableShown >= _tableModels.length) return;
+  var tbody = document.getElementById('tblBody');
+  if (!tbody) return;
+  var end = Math.min(_tableShown + TABLE_PAGE_SIZE, _tableModels.length);
+  var html = '';
+  for (var j = _tableShown; j < end; j++) html += _rowHtml(_tableModels[j]);
+  tbody.insertAdjacentHTML('beforeend', html);
+  _tableShown = end;
+  _initLazyImages();
+}
 
-  function renderChunk() {
-    if (token !== _renderToken) return; // запрос отменён новым рендером
-    var end = Math.min(i + CHUNK_SIZE, models.length);
-    var html = '';
-    for (var j = i; j < end; j++) html += _rowHtml(models[j]);
-    tbody.insertAdjacentHTML('beforeend', html);
-    i = end;
-    if (i < models.length) {
-      requestAnimationFrame(renderChunk);
-    } else {
-      _initLazyImages();
+// Догрузка страниц при приближении скролла к низу таблицы.
+// Scroll-листенер работает на любом webview (в отличие от content-visibility).
+var _tableScrollBound = false;
+function bindTableScroll() {
+  if (_tableScrollBound) return;
+  var scroller = document.getElementById('tableView');
+  if (!scroller) return;
+  _tableScrollBound = true;
+  scroller.addEventListener('scroll', function() {
+    if (_tableShown >= _tableModels.length) return;
+    // За 600px до низа начинаем догружать следующую страницу
+    if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 600) {
+      _renderNextPage(_renderToken);
     }
-  }
-  renderChunk();
+  }, { passive: true });
 }
 
 function _rowHtml(item) {
@@ -2347,6 +2385,7 @@ function _onPackPickerClick(e) {
 
 // Делегирование событий таблицы — регистрируется после загрузки DOM
 function initTableEvents() {
+  bindTableScroll(); // догрузка страниц таблицы при скролле
   var tbody = document.getElementById('tblBody');
   tbody.addEventListener('change', function(e) {
     var tr = e.target.closest('tr[data-model]');
