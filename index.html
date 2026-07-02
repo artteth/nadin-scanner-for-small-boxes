@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#15803d">
 
-  <title>Сканер упаковки v165</title>
+  <title>Сканер упаковки v166</title>
   <style>
     :root {
       --pack-font-size: 56px;
@@ -1066,7 +1066,7 @@
 <div class="landscape-wrap">
 <div class="card">
   <div class="card-header">
-    <h1 id="pageTitle">📦 Сканер упаковки v165</h1>
+    <h1 id="pageTitle">📦 Сканер упаковки v166</h1>
     <button id="refreshBtn" class="refresh-btn" onclick="refreshData()" title="Обновить данные">↻</button>
     <button class="settings-btn" onclick="openSettings()" title="Настройки">⚙️</button>
     <div id="autoRefreshBadge" class="auto-refresh-badge hidden" title="Автообновление включено">
@@ -1427,99 +1427,111 @@ function packTypeToSpeech(packType) {
   return packType.toString().split(/[\(\[\{]/)[0].trim();
 }
 
-// ── Звуковые сигналы (пилик) через Web Audio API ──
-// Короткий тон перед голосовой озвучкой: успех / ошибка / выбор упаковки.
-var _audioCtx = null;
-function _getAudioCtx() {
-  if (_audioCtx) return _audioCtx;
-  try {
-    var AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return null;
-    _audioCtx = new AC();
-  } catch(e) { return null; }
-  return _audioCtx;
+// ── Звуковые сигналы (пилик) через <audio> + WAV data-URI ──
+// Почему не Web Audio: в Safari синтез через AudioContext отдаёт ПЕРВЫЙ звук
+// с большой задержкой (часы контекста бегут впереди динамика), из-за чего
+// пилик «съезжает» на речь. У HTMLAudioElement событие `ended` привязано к
+// РЕАЛЬНОМУ воспроизведению — речь по нему запускается строго после пилика.
+var CUE_GAP = 320; // пауза (мс) между окончанием пилика и началом речи
+
+// Генерируем короткие пилики в PCM и кодируем в WAV data-URI (лениво, 1 раз).
+var _cueUriCache = {};
+function _cueUri(kind) {
+  if (_cueUriCache[kind]) return _cueUriCache[kind];
+  var SR = 16000;
+  var segs;
+  if (kind === 'success') {
+    segs = [{f:880,s:0.00,d:0.09,sq:false},{f:1320,s:0.11,d:0.13,sq:false}];
+  } else if (kind === 'error') {
+    segs = [{f:320,s:0.00,d:0.17,sq:true},{f:200,s:0.20,d:0.26,sq:true}];
+  } else {
+    segs = [{f:660,s:0.00,d:0.16,sq:false}];
+  }
+  var total = 0.02;
+  segs.forEach(function(x){ total = Math.max(total, x.s + x.d); });
+  var n = Math.ceil((total + 0.02) * SR);
+  var pcm = new Float32Array(n);
+  segs.forEach(function(x){
+    var start = Math.floor(x.s * SR), len = Math.floor(x.d * SR);
+    var att = 0.008 * SR, rel = 0.03 * SR;
+    for (var i = 0; i < len; i++) {
+      var ph = 2 * Math.PI * x.f * (i / SR);
+      var v = x.sq ? (Math.sin(ph) >= 0 ? 1 : -1) : Math.sin(ph);
+      var env = 1;
+      if (i < att) env = i / att;
+      else if (i > len - rel) env = Math.max(0, (len - i) / rel);
+      var idx = start + i;
+      if (idx < n) pcm[idx] += v * env * 0.6;
+    }
+  });
+  _cueUriCache[kind] = _encodeWavDataUri(pcm, SR);
+  return _cueUriCache[kind];
 }
 
-// Прогрев аудио-вывода (iOS «холодный старт»): проигрываем 1-сэмпловый
-// тихий буфер, чтобы динамик уже был активен и настоящий тон не выходил
-// с задержкой (иначе пилик слышен позже — во время речи).
-function _warmAudio(ctx) {
+function _encodeWavDataUri(samples, sampleRate) {
+  var n = samples.length;
+  var buf = new ArrayBuffer(44 + n * 2);
+  var dv = new DataView(buf);
+  var wstr = function(off, s){ for (var i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); };
+  wstr(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); wstr(8, 'WAVE');
+  wstr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+  dv.setUint16(22, 1, true); dv.setUint32(24, sampleRate, true);
+  dv.setUint32(28, sampleRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  wstr(36, 'data'); dv.setUint32(40, n * 2, true);
+  var off = 44;
+  for (var i = 0; i < n; i++) {
+    var s = Math.max(-1, Math.min(1, samples[i]));
+    dv.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true); off += 2;
+  }
+  var bytes = new Uint8Array(buf), bin = '';
+  for (var j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+  return 'data:audio/wav;base64,' + btoa(bin);
+}
+
+// Один переиспользуемый <audio> — разблокированный жестом, он потом играет
+// сразу (в т.ч. по BLE/камере, вне жеста).
+var _cueAudio = null;
+var _audioUnlocked = false;
+function _getCueAudio() {
+  if (!_cueAudio) { try { _cueAudio = new Audio(); _cueAudio.preload = 'auto'; } catch(e) { _cueAudio = null; } }
+  return _cueAudio;
+}
+
+// Разблокировка <audio> на первом жесте: тихо проигрываем и ставим на паузу.
+function unlockAudio() {
+  if (_audioUnlocked) return;
+  var a = _getCueAudio();
+  if (!a) return;
   try {
-    var b = ctx.createBuffer(1, 1, ctx.sampleRate);
-    var s = ctx.createBufferSource();
-    s.buffer = b; s.connect(ctx.destination); s.start(0);
+    a.muted = true;
+    a.src = _cueUri('select');
+    var p = a.play();
+    var fin = function(){ try { a.pause(); a.currentTime = 0; } catch(e){} a.muted = false; _audioUnlocked = true; };
+    if (p && p.then) p.then(fin).catch(function(){ a.muted = false; });
+    else fin();
   } catch(e) {}
 }
 
-// Разблокировка Web Audio на iOS — тоже требует жеста пользователя.
-function unlockAudio() {
-  var ctx = _getAudioCtx();
-  if (!ctx) return;
-  try { if (ctx.state !== 'running') ctx.resume(); } catch(e) {}
-  _warmAudio(ctx);
-}
-
-var CUE_GAP = 320; // пауза (мс) между окончанием пилика и началом речи
-
-// Один тон с плавным нарастанием/затуханием (без щелчков). Возвращает осциллятор.
-function _tone(ctx, freq, startT, dur, gainVal, type) {
-  var osc = ctx.createOscillator();
-  var g = ctx.createGain();
-  osc.type = type || 'sine';
-  osc.frequency.value = freq;
-  osc.connect(g); g.connect(ctx.destination);
-  g.gain.setValueAtTime(0.0001, startT);
-  g.gain.exponentialRampToValueAtTime(Math.max(gainVal, 0.0002), startT + 0.012);
-  g.gain.setValueAtTime(Math.max(gainVal, 0.0002), startT + dur - 0.03);
-  g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
-  osc.start(startT);
-  osc.stop(startT + dur + 0.02);
-  return osc;
-}
-
-// Ядро: проигрывает сигнал заданной громкости (%), затем (по РЕАЛЬНОМУ
-// окончанию последнего тона + пауза CUE_GAP) вызывает onDone — чтобы речь
-// шла ПОСЛЕ звука. Прогреваем вывод и ждём onended, а не таймер по clock —
-// иначе на iOS пилик «съезжает» и звучит уже во время речи.
+// Ядро: проигрывает сигнал заданной громкости (%); по РЕАЛЬНОМУ `ended`
+// (+ пауза CUE_GAP) вызывает onDone — речь идёт строго ПОСЛЕ пилика.
 function _emitCue(kind, volPct, onDone) {
-  var ctx = _getAudioCtx();
   var fired = false;
   var done = function() { if (fired) return; fired = true; if (onDone) onDone(); };
-  if (!ctx) { setTimeout(done, 0); return; }
-
-  var play = function() {
-    _warmAudio(ctx); // убираем задержку холодного старта именно этого пилика
-    var vol = Math.max(0, Math.min((volPct || 100) / 100, 1));
-    var g = 0.22 * vol;
-    if (g <= 0) { done(); return; }
-    var t = ctx.currentTime + 0.06;
-    var end = t, lastOsc = null;
-    try {
-      if (kind === 'success') {
-        // Два восходящих «пилика» — удачный исход
-        _tone(ctx, 880, t, 0.09, g, 'sine');
-        lastOsc = _tone(ctx, 1320, t + 0.10, 0.12, g, 'sine'); end = t + 0.10 + 0.12;
-      } else if (kind === 'error') {
-        // Два низких резких тона — ошибка
-        _tone(ctx, 320, t, 0.17, g, 'square');
-        lastOsc = _tone(ctx, 200, t + 0.19, 0.24, g, 'square'); end = t + 0.19 + 0.24;
-      } else {
-        // Один средний тон — нужно выбрать упаковку
-        lastOsc = _tone(ctx, 660, t, 0.15, g, 'sine'); end = t + 0.15;
-      }
-    } catch(e) {}
-    // Речь запускаем по факту окончания последнего тона + пауза.
-    if (lastOsc) { try { lastOsc.onended = function() { setTimeout(done, CUE_GAP); }; } catch(e) {} }
-    // Фолбэк, если onended не сработал (некоторые webview): с запасом.
-    var ms = Math.max(0, (end - ctx.currentTime) * 1000) + CUE_GAP + 500;
-    setTimeout(done, ms);
-  };
-
-  if (ctx.state !== 'running') {
-    try { ctx.resume().then(play).catch(play); } catch(e) { play(); }
-  } else {
-    play();
-  }
+  var a = _getCueAudio();
+  var vol = Math.max(0, Math.min((volPct || 100) / 100, 1));
+  if (!a || vol <= 0) { setTimeout(done, 0); return; }
+  try {
+    a.onended = function() { setTimeout(done, CUE_GAP); };
+    a.onerror = function() { done(); };
+    a.muted = false;
+    a.volume = vol;
+    a.src = _cueUri(kind);
+    try { a.currentTime = 0; } catch(e) {}
+    var p = a.play();
+    if (p && p.catch) p.catch(function() { done(); });
+    // Фолбэк, если ended/ошибка не пришли (с большим запасом)
+    setTimeout(done, 4000);
+  } catch(e) { done(); }
 }
 
 // Проигрывает сигнал с учётом тумблера и громкости из настроек.
@@ -4075,7 +4087,8 @@ window.onload = function() {
         Звуковые сигналы (пилик)
       </label>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-bottom:10px">
-        Короткий сигнал при находке: <b>успех</b> — два восходящих пилика, <b>ошибка</b> — низкий сигнал, <b>нужно выбрать упаковку</b> — средний тон. Затем идёт голосовая подсказка.
+        Короткий сигнал при находке: <b>успех</b> — два восходящих пилика, <b>ошибка</b> — низкий сигнал, <b>нужно выбрать упаковку</b> — средний тон. Затем идёт голосовая подсказка.<br>
+        Если в Safari пилик звучит с задержкой (во время речи) — <b>выключите</b> этот пункт: тогда озвучка начинается <b>сразу, без паузы</b>.
       </div>
       <label class="settings-checkbox-label">
         <input type="checkbox" id="setSpeakPackType" checked>
